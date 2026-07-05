@@ -750,11 +750,11 @@ const EmailSettingsPanel = () => {
               </small>
             </div>
             <Nav variant="underline" className="flex-nowrap gap-3 border-0 small fw-semibold">
-              {/* <Nav.Item>
+             <Nav.Item>
                 <Nav.Link eventKey="smtp" className="px-2 py-2">
                   SMTP &amp; sender
                 </Nav.Link>
-              </Nav.Item> */}
+              </Nav.Item> 
               <Nav.Item>
                 <Nav.Link eventKey="templates" className="px-2 py-2">
                   Email templates
