@@ -1,0 +1,470 @@
+/* Dashboard.module.css */
+.dashboardWrapper {
+    min-height: 100vh;
+    background: #f8f9fc;
+  }
+  
+  /* Header Styles */
+  .header {
+    background: white;
+    padding: 1.5rem 0;
+    border-bottom: 1px solid #e3e6f0;
+  }
+  
+  .headerContent {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.5rem;
+    position: relative;
+  }
+  
+  .headerContent::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: #e3e6f0;
+    border-bottom: 1px dashed #4e73df;
+  }
+  
+  /* Left side of header */
+  .headerLeft {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #2e384d;
+    margin: 0;
+  }
+  
+  .welcomeSection {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  
+  .userAvatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #e3e6f0;
+  }
+  
+  .welcomeText {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  
+  .subtitle {
+    color: #858796;
+    margin: 0;
+    font-size: 0.875rem;
+  }
+  
+  .userName {
+    color: #2e384d;
+    font-weight: 600;
+    margin: 0;
+    font-size: 1rem;
+  }
+  
+  /* Right side of header */
+  .headerActions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  
+  .searchBox {
+    min-width: 300px;
+  }
+  
+  .searchIcon {
+    background: transparent;
+    border-right: none;
+    color: #858796;
+  }
+  
+  .searchInput {
+    border-left: none;
+    padding-left: 0;
+  }
+  
+  .searchInput:focus {
+    box-shadow: none;
+    border-color: #e3e6f0;
+  }
+  
+  .searchFilter {
+    color: #858796;
+    padding: 0 0.75rem;
+  }
+  
+  .actionButtons {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  
+  .exportButton, .createButton {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+  }
+  
+  .buttonText {
+    display: inline-block;
+    margin-left: 0.25rem;
+  }
+  
+  .notificationBell {
+    position: relative;
+    padding: 0.5rem;
+    cursor: pointer;
+    color: #858796;
+  }
+  
+  .notificationBadge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #e74a3b;
+    color: white;
+    border-radius: 50%;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    min-width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  /* Time Filter Section */
+  .timeFilter {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .filterGroup {
+    display: flex;
+    gap: 0.5rem;
+  }
+  
+  .filterBtn {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+  }
+  
+  .filterBtn.active {
+    background-color: #4e73df;
+    border-color: #4e73df;
+  }
+  
+  .viewToggle {
+    display: flex;
+    gap: 0.5rem;
+  }
+  
+  .viewBtn {
+    padding: 0.5rem;
+    color: #858796;
+  }
+  
+  .viewBtn:hover {
+    background-color: #f8f9fc;
+    color: #4e73df;
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
+    .headerContent {
+      flex-direction: column;
+      gap: 1rem;
+      align-items: stretch;
+    }
+  
+    .headerActions {
+      flex-direction: column;
+      gap: 1rem;
+    }
+  
+    .searchBox {
+      min-width: 100%;
+    }
+  
+    .actionButtons {
+      justify-content: space-between;
+    }
+  
+    .timeFilter {
+      flex-direction: column;
+      gap: 1rem;
+    }
+  
+    .filterGroup {
+      width: 100%;
+      justify-content: space-between;
+    }
+  
+    .viewToggle {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+  
+  /* Stat Cards */
+  .statCard {
+    background: white;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    height: 100%;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  }
+  
+  .statCard:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  }
+  
+  .statContent {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  
+  .statInfo {
+    flex: 1;
+  }
+  
+  .statTitle {
+    color: #858796;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+  }
+  
+  .statValue {
+    font-size: 1.75rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+  
+  .statTrend {
+    color: #1cc88a;
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  
+  .statStatus {
+    color: #858796;
+    font-size: 0.875rem;
+  }
+  
+  .statIcon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+  }
+  
+  /* Icon colors */
+  .iconprimary { background: #eaecf4; color: #4e73df; }
+  .iconsuccess { background: #e3fcef; color: #1cc88a; }
+  .iconwarning { background: #fff3cd; color: #f6c23e; }
+  .iconinfo { background: #e1f0ff; color: #36b9cc; }
+  
+  /* Chart Cards */
+  .chartCard {
+    background: white;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    height: 100%;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  }
+  
+  .chartHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
+  }
+  
+  .chartTitle {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+  
+  .chartSubtitle {
+    color: #858796;
+    font-size: 0.875rem;
+    margin: 0;
+  }
+  
+  .chartLegend {
+    display: flex;
+    gap: 1rem;
+  }
+  
+  .chartLegend span {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: #858796;
+  }
+  
+  .chartContent {
+    margin-top: 1rem;
+  }
+  
+  /* Distribution Legend */
+  .distributionLegend {
+    margin-top: 1.5rem;
+    display: grid;
+    gap: 1rem;
+  }
+  
+  .legendItem {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  
+  .legendDot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  
+  .legendLabel {
+    flex: 1;
+    color: #5a5c69;
+  }
+  
+  .legendValue {
+    font-weight: 500;
+  }
+
+  .welcome-popup {
+    border-radius: 12px !important;
+    padding: 0 !important;
+  }
+  
+  .admin-welcome-container {
+    padding: 1.5rem;
+  }
+  
+  .welcome-grid {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 1.5rem;
+  }
+  
+  .welcome-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .profile-image {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #e5e9f2;
+  }
+  
+  .welcome-text h2 {
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
+  }
+  
+  .session-info {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+  }
+  
+  .info-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+  }
+  
+  .whats-new-section {
+    border-left: 1px solid #e5e9f2;
+    padding-left: 1.5rem;
+  }
+  
+  .whats-new-header {
+    margin-bottom: 1rem;
+  }
+  
+  .updates-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .update-item {
+    display: flex;
+    gap: 1rem;
+    padding: 0.75rem;
+    border-radius: 8px;
+    background: #f8f9fa;
+  }
+  
+  .update-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .update-icon.new { background: #e7f1ff; color: #0d6efd; }
+  .update-icon.improved { background: #e6f8f0; color: #198754; }
+  .update-icon.coming { background: #fff8ec; color: #ffc107; }
+  
+  .badge.new-badge { background: #0d6efd; }
+  .badge.improved-badge { background: #198754; }
+  .badge.coming-badge { background: #ffc107; color: #000; }
+  
+  .welcome-footer {
+    padding: 1rem !important;
+    border-top: 1px solid #e5e9f2 !important;
+    justify-content: flex-end !important;
+  }
+  
+  #letsBeginBtn {
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+  
+  #letsBeginBtn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }

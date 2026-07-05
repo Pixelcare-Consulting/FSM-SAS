@@ -1,0 +1,293 @@
+/* Shared modern detail-modal frame.
+   Single source of truth for the scheduler job-view modal and the
+   Customer Leads "Response Details" modal so both stay visually consistent. */
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modalContent {
+  background: #fff;
+  border-radius: 12px;
+  max-width: 480px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+}
+
+/* Wider variant for richer content (e.g. lead Response Details). */
+.lg {
+  max-width: 720px;
+}
+
+/* Extra-wide variant for two-column lead detail layout. */
+.xl {
+  max-width: 900px;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modalTitle {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.modalClose {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+
+.modalClose:hover {
+  color: #111827;
+}
+
+.modalBody {
+  padding: 20px;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.detailRow {
+  display: flex;
+  align-items: flex-start;
+  padding: 12px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.detailRow:last-child {
+  border-bottom: none;
+}
+
+.detailLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  width: 120px;
+  flex-shrink: 0;
+}
+
+.detailValue {
+  font-size: 14px;
+  color: #111827;
+  flex: 1;
+}
+
+/* Grouped sections for richer detail content. */
+.section {
+  margin-bottom: 24px;
+}
+
+.section:last-child {
+  margin-bottom: 0;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #3b82f6;
+  margin: 0 0 8px;
+}
+
+/* Two-up responsive field grid, collapses to one column on small screens. */
+.detailGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  column-gap: 24px;
+}
+
+.detailGrid .detailRow {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .detailGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Action buttons (mirrors TimelineScheduler.module.css for parity). */
+.actionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.actionBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.actionBtnOutline {
+  background: #fff;
+  border-color: #d1d5db;
+  color: #374151;
+}
+
+.actionBtnOutline:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.actionBtnPrimary {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.actionBtnPrimary:hover {
+  background: #2563eb;
+}
+
+.actionBtnSuccess {
+  background: #10b981;
+  color: #fff;
+}
+
+.actionBtnSuccess:hover {
+  background: #059669;
+}
+
+.actionBtnWarning {
+  background: #f59e0b;
+  color: #fff;
+}
+
+.actionBtnWarning:hover {
+  background: #d97706;
+}
+
+/* ------------------------------------------------------------------ */
+/* Lead "Response Details" card-section layout (additive — the        */
+/* scheduler JobDetailModal does not use any of the classes below).   */
+/* ------------------------------------------------------------------ */
+
+/* Avatar circle shown in the modal header. */
+.headerAvatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 600;
+  font-size: 15px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+}
+
+/* Two-column body: left = Basic Info, right = stacked cards. */
+.leadGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.leadColStack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .leadGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Polished bordered/rounded section card. */
+.card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fafbfc;
+  padding: 16px 18px;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #3b82f6;
+  margin: 0 0 4px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eaecef;
+}
+
+.cardHeader svg {
+  color: #3b82f6;
+  flex-shrink: 0;
+}
+
+/* Aligned label/value pair inside a card. */
+.cardRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 9px 0;
+}
+
+.cardRow + .cardRow {
+  border-top: 1px solid #f1f3f5;
+}
+
+.cardLabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+  width: 132px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.cardValue {
+  font-size: 14px;
+  line-height: 1.45;
+  color: #111827;
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}

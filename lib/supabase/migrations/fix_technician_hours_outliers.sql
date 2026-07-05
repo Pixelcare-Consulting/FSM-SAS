@@ -1,0 +1,114 @@
+-- =============================================
+-- MANUAL: Targeted fixes for known bad technician_jobs rows
+-- =============================================
+-- Run in Supabase SQL editor BEFORE backfill_technician_hours.sql when outliers are confirmed.
+-- Review each block; uncomment and adjust job_number / filters as needed.
+
+-- ---------------------------------------------------------------------------
+-- Diagnostic: top raw timestamp spans vs cached labor_hours
+-- Preview only — LIMIT 30 is optional; remove LIMIT for full scan.
+-- ---------------------------------------------------------------------------
+-- SELECT
+--   tj.id,
+--   j.job_number,
+--   tj.assignment_status,
+--   tj.started_at,
+--   tj.completed_at,
+--   tj.accumulated_hours,
+--   j.scheduled_start,
+--   j.scheduled_end,
+--   EXTRACT(EPOCH FROM (tj.completed_at - tj.started_at)) / 3600.0 AS raw_span_h,
+--   th.labor_hours AS cached_h
+-- FROM technician_jobs tj
+-- JOIN jobs j ON j.id = tj.job_id
+-- LEFT JOIN technician_hours th ON th.technician_job_id = tj.id
+-- WHERE tj.deleted_at IS NULL AND j.deleted_at IS NULL
+-- ORDER BY raw_span_h DESC NULLS LAST
+-- LIMIT 30;
+
+-- ---------------------------------------------------------------------------
+-- Flag corrupt rows: started_at more than 7 days before job schedule
+-- Full scan — no LIMIT (see BULK fix block below for automated UPDATE)
+-- ---------------------------------------------------------------------------
+-- SELECT
+--   tj.id,
+--   j.job_number,
+--   tj.started_at,
+--   j.scheduled_start,
+--   EXTRACT(EPOCH FROM (tj.completed_at - tj.started_at)) / 3600.0 AS raw_span_h
+-- FROM technician_jobs tj
+-- JOIN jobs j ON j.id = tj.job_id
+-- WHERE tj.deleted_at IS NULL
+--   AND j.deleted_at IS NULL
+--   AND tj.started_at IS NOT NULL
+--   AND j.scheduled_start IS NOT NULL
+--   AND tj.started_at < j.scheduled_start - INTERVAL '7 days'
+-- ORDER BY raw_span_h DESC NULLS LAST;
+
+-- ---------------------------------------------------------------------------
+-- BULK: stale started_at (>7 days before scheduled_start) — all matching rows
+-- Same pattern fn_compute_technician_labor_hours treats as corrupt (→ 0 labor).
+-- No job_number filter, no LIMIT. Run count block first; then uncomment UPDATE.
+-- Skips rows with mobile accumulated_hours (prefer that over clearing started_at).
+-- ---------------------------------------------------------------------------
+-- SELECT COUNT(*) AS stale_started_at_rows
+-- FROM technician_jobs tj
+-- JOIN jobs j ON j.id = tj.job_id
+-- WHERE tj.deleted_at IS NULL
+--   AND j.deleted_at IS NULL
+--   AND tj.started_at IS NOT NULL
+--   AND j.scheduled_start IS NOT NULL
+--   AND tj.started_at < j.scheduled_start - INTERVAL '7 days'
+--   AND (tj.accumulated_hours IS NULL OR tj.accumulated_hours <= 0);
+
+-- UPDATE technician_jobs tj
+-- SET started_at = NULL, updated_at = NOW()
+-- FROM jobs j
+-- WHERE j.id = tj.job_id
+--   AND tj.deleted_at IS NULL
+--   AND j.deleted_at IS NULL
+--   AND tj.started_at IS NOT NULL
+--   AND j.scheduled_start IS NOT NULL
+--   AND tj.started_at < j.scheduled_start - INTERVAL '7 days'
+--   AND (tj.accumulated_hours IS NULL OR tj.accumulated_hours <= 0);
+
+-- ---------------------------------------------------------------------------
+-- #2026-002610 style: in-progress must not have completed_at
+-- ---------------------------------------------------------------------------
+-- UPDATE technician_jobs tj
+-- SET completed_at = NULL, updated_at = NOW()
+-- FROM jobs j
+-- WHERE j.id = tj.job_id
+--   AND j.job_number = '2026-002610'
+--   AND UPPER(tj.assignment_status) <> 'COMPLETED'
+--   AND tj.completed_at IS NOT NULL;
+
+-- ---------------------------------------------------------------------------
+-- #2026-001302 style (~910h): stale started_at vs 2026 schedule
+-- Option A: if mobile has correct accumulated_hours, set it:
+-- ---------------------------------------------------------------------------
+-- UPDATE technician_jobs tj
+-- SET accumulated_hours = <hours_from_mobile>, updated_at = NOW()
+-- FROM jobs j
+-- WHERE j.id = tj.job_id
+--   AND j.job_number = '2026-001302';
+
+-- Option B: clear bad started_at so mobile re-captures on next sync (use with care):
+-- UPDATE technician_jobs tj
+-- SET started_at = NULL, updated_at = NOW()
+-- FROM jobs j
+-- WHERE j.id = tj.job_id
+--   AND j.job_number = '2026-001302'
+--   AND tj.started_at < j.scheduled_start - INTERVAL '7 days';
+
+-- ---------------------------------------------------------------------------
+-- Verify post-fix (replace month/year as needed; LIMIT 20 is preview only)
+-- ---------------------------------------------------------------------------
+-- SELECT j.job_number, th.labor_hours, th.period_anchor_at
+-- FROM technician_hours th
+-- JOIN technician_jobs tj ON tj.id = th.technician_job_id
+-- JOIN jobs j ON j.id = tj.job_id
+-- WHERE th.period_anchor_at >= '2026-06-01'
+--   AND th.period_anchor_at < '2026-07-01'
+-- ORDER BY th.labor_hours DESC
+-- LIMIT 20;

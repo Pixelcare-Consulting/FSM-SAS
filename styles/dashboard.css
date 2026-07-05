@@ -1,0 +1,287 @@
+
+/* Modern Dashboard Styling */
+.dashboard-container {
+  padding: 2rem;
+  background: #f8f9fd;
+  min-height: 100vh;
+}
+
+/* Full width dashboard - no max-width constraints */
+.dashboard-wrapper {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.dashboard-header {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Ensure container-fluid doesn't constrain width */
+.dashboard-wrapper .container-fluid,
+.dashboard-wrapper [class*="container"] {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideRight {
+  from { transform: translateX(-20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideLeft {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Animation Classes */
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out;
+}
+
+.animate-slide-down {
+  animation: slideDown 0.5s ease-out;
+}
+
+.animate-slide-right {
+  animation: slideRight 0.5s ease-out;
+}
+
+.animate-slide-left {
+  animation: slideLeft 0.5s ease-out;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.5s ease-out forwards;
+}
+
+/* Modern Components */
+.metric-card {
+  background: white;
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.metric-content {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.metric-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white;
+}
+
+.metric-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1;
+  background: linear-gradient(135deg, #1a1a1a 0%, #4a4a4a 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.metric-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
+  transition: width 1s ease-in-out;
+}
+
+/* Chart Card */
+.chart-card {
+  background: white;
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  margin-bottom: 1.5rem;
+}
+
+.time-filter {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.time-filter:hover {
+  border-color: #6366f1;
+}
+
+/* Jobs List */
+.jobs-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.job-item {
+  padding: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.job-item:hover {
+  background: #f8f9fd;
+  transform: translateX(5px);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c5c5c5;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 1rem;
+  }
+  
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .dashboard-content {
+    flex-direction: column;
+  }
+}
+
+.stat-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+/* Table Full Width Styles - Allow table to expand to show all content */
+.dashboard-wrapper .table-responsive {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  display: block !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dashboard-wrapper .table {
+  width: 100% !important;
+  max-width: none !important;
+  table-layout: auto !important;
+  margin-bottom: 0 !important;
+  min-width: 100% !important;
+}
+
+/* Allow table to grow beyond container if needed */
+.dashboard-wrapper .table-responsive .table {
+  min-width: max-content !important;
+  width: auto !important;
+}
+
+/* Ensure table-responsive can expand fully */
+.dashboard-wrapper .table-responsive {
+  max-width: none !important;
+  overflow-x: auto !important;
+}
+
+/* Ensure table cells can expand to fit content */
+.dashboard-wrapper .table th,
+.dashboard-wrapper .table td {
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+/* Remove any max-width constraints on the card containing the table */
+.dashboard-wrapper .card {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+.dashboard-wrapper .card-body {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Ensure Row and Col allow full width */
+.dashboard-wrapper .row {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.dashboard-wrapper .row > [class*="col"] {
+  max-width: 100% !important;
+}
+
+/* Override Bootstrap container max-widths for dashboard */
+.dashboard-wrapper .container,
+.dashboard-wrapper .container-fluid,
+.dashboard-wrapper .container-sm,
+.dashboard-wrapper .container-md,
+.dashboard-wrapper .container-lg,
+.dashboard-wrapper .container-xl,
+.dashboard-wrapper .container-xxl {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+/* Ensure no parent container constraints */
+.dashboard-wrapper,
+.dashboard-wrapper > *,
+.dashboard-wrapper > * > * {
+  max-width: 100% !important;
+} 

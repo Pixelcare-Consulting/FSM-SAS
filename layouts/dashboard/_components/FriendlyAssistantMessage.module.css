@@ -1,0 +1,44 @@
+.root {
+  font-size: 0.9rem;
+  line-height: 1.55;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  color: inherit;
+}
+
+.para {
+  margin: 0;
+}
+
+.list {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.list li {
+  margin: 0.35em 0;
+  padding-left: 0.15rem;
+}
+
+.list li::marker {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.note {
+  margin: 0;
+  padding: 0.6rem 0.85rem;
+  background: rgba(37, 99, 235, 0.08);
+  border-radius: 0.5rem;
+  border-left: 3px solid #2563eb;
+}
+
+.noteLine {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.noteLine + .noteLine {
+  margin-top: 0.4rem;
+}

@@ -1,0 +1,97 @@
+//
+// user.scss
+// Use this to write your custom SCSS
+//
+
+/* Override SweetAlert2 default styles */
+// .swal2-html-container {
+//   font-family: inherit !important;
+//   font-size: 14px !important;
+//   color: #64748b !important;
+//   margin-top: 8px !important;
+// }
+
+// .swal2-icon {
+//   border-color: #fbbf24 !important;
+//   color: #fbbf24 !important;
+//   margin-top: 16px !important;
+//   margin-bottom: 16px !important;
+// }
+
+.container {
+  width: 100%;
+  padding: 0 15px;
+  margin: 0 auto;
+
+  @media (min-width: 576px) {
+    max-width: 540px;
+  }
+
+  @media (min-width: 768px) {
+    max-width: 720px;
+  }
+
+  @media (min-width: 992px) {
+    max-width: 960px;
+  }
+
+  @media (min-width: 1200px) {
+    max-width: 100%;
+  }
+}
+
+body {
+  overflow-x: hidden;
+}
+
+// /* Override SweetAlert2 default styles */
+// ::global(.swal2-html-container) {
+//   font-family: inherit !important;
+//   font-size: 14px !important;
+//   color: #64748b !important;
+//   margin-top: 8px !important;
+// }
+
+// ::global(.swal2-icon) {
+//   border-color: #fbbf24 !important;
+//   color: #fbbf24 !important;
+//   margin-top: 16px !important;
+//   margin-bottom: 16px !important;
+// }
+
+// .container {
+//     width: 100%;
+//     padding-right: 15px;
+//     padding-left: 15px;
+//     margin-right: auto;
+//     margin-left: auto;
+//   }
+  
+//   @media (min-width: 576px) {
+//     .container {
+//       max-width: 540px;
+//     }
+//   }
+  
+//   @media (min-width: 768px) {
+//     .container {
+//       max-width: 720px;
+//     }
+//   }
+  
+//   @media (min-width: 992px) {
+//     .container {
+//       max-width: 960px;
+//     }
+//   }
+  
+//   @media (min-width: 1200px) {
+//     .container {
+//       max-width: 100%;
+//     }
+//   }
+  
+//   body {
+//     overflow-x: hidden;
+//   }
+  

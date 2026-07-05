@@ -1,0 +1,38 @@
+# Hourly SAP job sync — free alternative to Vercel Cron (Hobby allows only once/day).
+# https://vercel.com/docs/cron-jobs/usage-and-pricing
+#
+# Repo secrets (Settings → Secrets and variables → Actions):
+#   CRON_SECRET              — same as Vercel env
+#   JOB_SYNC_CRON_BASE_URL   — e.g. https://your-app.vercel.app
+
+name: Job sync to SAP (hourly)
+
+on:
+  schedule:
+    # Every hour at :05 UTC (endpoint skips outside 7am–11:59pm Asia/Manila)
+    - cron: '5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Trigger production cron endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          JOB_SYNC_CRON_BASE_URL: ${{ secrets.JOB_SYNC_CRON_BASE_URL }}
+        run: |
+          if [ -z "$CRON_SECRET" ] || [ -z "$JOB_SYNC_CRON_BASE_URL" ]; then
+            echo "Set CRON_SECRET and JOB_SYNC_CRON_BASE_URL repository secrets."
+            exit 1
+          fi
+          BASE="${JOB_SYNC_CRON_BASE_URL%/}"
+          URL="${BASE}/api/cron/sync-jobs-to-sap?secret=${CRON_SECRET}"
+          echo "GET $BASE/api/cron/sync-jobs-to-sap"
+          HTTP_CODE=$(curl -sS -o /tmp/cron-response.json -w "%{http_code}" "$URL")
+          cat /tmp/cron-response.json
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "Request failed with HTTP $HTTP_CODE"
+            exit 1
+          fi

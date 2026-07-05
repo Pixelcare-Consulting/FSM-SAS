@@ -1,0 +1,10 @@
+.logoContainer {
+  padding-left: 1rem;
+  margin-left: 10px;
+}
+
+.logo {
+  object-fit: contain;
+  width: 120px;
+  height: 40px;
+} 

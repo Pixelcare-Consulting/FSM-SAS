@@ -1,0 +1,79 @@
+.actionButtons {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.repeatButtonAlt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  color: #495057;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.repeatButtonAlt:hover {
+  background-color: #e9ecef;
+  border-color: #ced4da;
+}
+
+.buttonContent {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icon {
+  font-size: 15px;
+  color: #6c757d;
+}
+
+.repeatButtonAlt:hover .icon {
+  animation: spin 1s ease infinite;
+}
+
+.viewDetailsButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background-color: #0d6efd;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.viewDetailsButton:hover {
+  background-color: #0b5ed7;
+}
+
+.arrowIcon {
+  transition: transform 0.2s ease;
+}
+
+.viewDetailsButton:hover .arrowIcon {
+  animation: spin 1s ease infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+} 

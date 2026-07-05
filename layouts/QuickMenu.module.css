@@ -1,0 +1,827 @@
+/* QuickMenu Custom Styles - Unique class names to avoid conflicts */
+
+/* Search Results Highlight */
+.qmHighlightText {
+  background-color: #e8f4fd !important;
+  color: #0d6efd !important;
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.2rem;
+  font-weight: 600;
+}
+
+/* Search Results Category Header */
+.qmCategoryHeader {
+  padding: 0.5rem;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.qmCategoryTitle {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: #495057;
+  margin: 0;
+}
+
+.qmCategoryCount {
+  margin-left: 0.5rem;
+  color: #6c757d;
+  font-weight: 400;
+}
+
+/* Search Result Item */
+.qmSearchItem {
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background-color 0.2s ease;
+}
+
+.qmSearchItem:hover {
+  background-color: #f8f9fa;
+}
+
+.qmSearchItemTitle {
+  font-weight: 500;
+  color: #212529;
+  margin-bottom: 0.25rem;
+}
+
+.qmSearchItemSubtitle {
+  font-size: 0.875rem;
+  color: #6c757d;
+}
+
+/* Status Tags */
+.qmStatusTag {
+  margin-left: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 50px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  display: inline-block;
+}
+
+.qmStatusCreated {
+  background-color: #FEF3C7;
+  color: #D97706;
+}
+
+.qmStatusInProgress {
+  background-color: #DBEAFE;
+  color: #2563EB;
+}
+
+.qmStatusCompleted {
+  background-color: #D1FAE5;
+  color: #059669;
+}
+
+.qmStatusCancelled {
+  background-color: #FEE2E2;
+  color: #DC2626;
+}
+
+.qmStatusPending {
+  background-color: #E5E7EB;
+  color: #4B5563;
+}
+
+/* Worker Info */
+.qmWorkerInfo {
+  display: flex;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.qmWorkerEmail {
+  font-size: 0.875rem;
+  color: #0d6efd;
+  margin-right: 1rem;
+}
+
+.qmWorkerRole {
+  font-size: 0.875rem;
+  color: #6c757d;
+}
+
+/* User Avatar — single row with name beside image so the top bar stays short */
+.qmAvatarWrapper {
+  position: relative;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  width: auto;
+  min-height: 0;
+  margin-right: 0;
+  max-width: 220px;
+}
+
+.qmAvatarTextCol {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 0.15rem;
+}
+
+.qmAvatarContainer {
+  width: 38px;
+  height: 38px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.qmAvatarImage {
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #e5e9f2;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.qmAvatarDefault {
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #e5e9f2;
+  background-color: #f8f9fa;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.qmAvatarStatus {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  background-color: #00d27a;
+  border-radius: 50%;
+  border: 2px solid #fff;
+}
+
+.qmAvatarStatusDefault {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background-color: #00d27a;
+  border-radius: 50%;
+  border: 2px solid #fff;
+}
+
+.qmAvatarName {
+  position: static;
+  transform: none;
+  bottom: auto;
+  left: auto;
+  white-space: nowrap;
+  text-align: start;
+  width: auto;
+  max-width: 9.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #212529;
+}
+
+.qmWhatsNewLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #2563eb;
+  text-decoration: none;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.qmWhatsNewLink:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.qmWhatsNewBadge {
+  font-size: 0.5625rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em;
+  padding: 0.2em 0.45em !important;
+  line-height: 1 !important;
+}
+
+/* Modern Search Bar - Fresh Implementation */
+.modernSearchContainer {
+  position: relative;
+  /* Was 300px — wider so placeholder fits; shrinks on narrow viewports */
+  width: min(500px, calc(100vw - 14rem));
+  max-width: 100%;
+}
+
+.modernSearchWrapper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+}
+
+.modernSearchInputContainer {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.modernSearchInput {
+  width: 100%;
+  background-color: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 6px 0 0 6px;
+  padding: 0.4rem 0.75rem;
+  padding-right: 2.25rem;
+  font-size: 0.8125rem;
+  color: #212529;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.modernSearchInput::placeholder {
+  color: #6c757d;
+  opacity: 1;
+}
+
+.modernSearchInput:focus {
+  background-color: #ffffff;
+  border-color: #4171F5;
+  box-shadow: 0 0 0 3px rgba(65, 113, 245, 0.1);
+}
+
+.modernSearchClear {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #6c757d;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  transition: all 0.2s ease;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.modernSearchClear:hover {
+  color: #212529;
+  background-color: #f1f3f5;
+  border-radius: 4px;
+}
+
+.modernSearchClear:active {
+  background-color: #e9ecef;
+  transform: translateY(-50%) scale(0.95);
+}
+
+.modernSearchButton {
+  background-color: #4171F5;
+  border: 1px solid #4171F5;
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+  padding: 0.4rem 0.75rem;
+  min-width: 44px;
+  min-height: 2.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.modernSearchButton:hover:not(:disabled) {
+  background-color: #3560e8;
+  border-color: #3560e8;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(65, 113, 245, 0.2);
+}
+
+.modernSearchButton:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(65, 113, 245, 0.2);
+}
+
+.modernSearchButton:disabled {
+  background-color: #6c757d;
+  border-color: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.modernSearchHint {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.6875rem;
+  color: #6c757d;
+  line-height: 1.35;
+}
+
+/* Legacy Search Bar Styles - Keep for backward compatibility */
+.qmSearchWrapper {
+  position: relative;
+  width: 300px;
+}
+
+.qmInputGroup {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+
+.qmSearchInput {
+  background-color: #f8f9fa;
+  border-radius: 8px 0 0 8px;
+  padding: 0.6rem 1rem;
+  font-size: 0.875rem;
+  border: 1px solid #dee2e6;
+  border-right: none;
+  flex: 1;
+  position: relative;
+}
+
+.qmSearchInput:focus {
+  background-color: #fff;
+  border-color: #80bdff;
+  outline: 0;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+  z-index: 1;
+}
+
+.qmSearchClearBtn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  right: 3.5rem;
+  z-index: 15;
+  padding: 0.25rem;
+  min-width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #6c757d;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 1;
+  visibility: visible;
+}
+
+.qmSearchClearBtn:hover {
+  color: #212529;
+  background-color: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+  opacity: 1;
+}
+
+.qmSearchClearBtn:active {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.qmSearchClearBtn:focus {
+  outline: 2px solid rgba(0, 123, 255, 0.25);
+  outline-offset: 2px;
+}
+
+.qmSearchBtn {
+  border-radius: 0 8px 8px 0;
+  padding: 0.6rem 1.2rem;
+  border: none;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.qmSearchHint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: #6c757d;
+}
+
+/* Empty State */
+.qmEmptyState {
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.qmEmptyIcon {
+  font-size: 2rem;
+  color: #6c757d;
+  margin-bottom: 0.5rem;
+}
+
+.qmEmptyText {
+  color: #6c757d;
+  margin: 0;
+}
+
+/* Loading State */
+.qmLoadingState {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #6c757d;
+}
+
+.qmSpinner {
+  display: inline-block;
+  margin-right: 0.5rem;
+}
+
+/* Notification Item */
+.qmNotificationItem {
+  padding: 1rem;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background-color 0.2s ease;
+}
+
+.qmNotificationItem:hover {
+  background-color: #f8f9fa;
+}
+
+.qmNotificationUnread {
+  background-color: #f0f7ff;
+}
+
+/* Dropdown Menu Customization */
+.qmDropdownMenu {
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 0.5rem;
+}
+
+/* User profile dropdown — compact width, less right-side padding */
+.qmUserDropdownMenu {
+  min-width: 0;
+  width: max-content;
+  max-width: min(220px, calc(100vw - 24px));
+}
+
+.qmUserDropdownMenu .qmDropdownItem {
+  padding: 0.625rem 0.875rem;
+  white-space: nowrap;
+}
+
+.qmUserDropdownMenu .qmUserProfile {
+  padding: 0.75rem 0.875rem;
+}
+
+.qmUserDropdownMenu .qmUserProfileEmail {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qmUserDropdownMenu > :global(.dropdown-item) {
+  padding-left: 0.875rem;
+  padding-right: 0.875rem;
+}
+
+.qmDropdownItem {
+  padding: 0.75rem 1.25rem;
+  transition: background-color 0.2s ease;
+}
+
+.qmDropdownItem:hover {
+  background-color: #f8f9fa;
+}
+
+/* User Dropdown Profile */
+.qmUserProfile {
+  padding: 1rem 1.25rem;
+}
+
+.qmUserProfileName {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  color: #212529;
+}
+
+.qmUserProfileEmail {
+  font-size: 0.875rem;
+  color: #6c757d;
+  margin: 0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .qmSearchWrapper {
+    width: 100%;
+  }
+
+  .qmAvatarWrapper {
+    margin-right: 0.5rem;
+  }
+
+  .qmAvatarName {
+    display: none;
+  }
+
+  .qmNotifMenu {
+    width: min(360px, calc(100vw - 24px)) !important;
+  }
+}
+
+/* Notification bell: wrapper li for hover-open + valid ul > li structure */
+.qmNotifLi {
+  list-style: none;
+  display: flex;
+  align-items: center;
+}
+
+.qmNotifToggle {
+  position: relative !important;
+  width: 40px !important;
+  height: 40px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50% !important;
+  background: #f0f2f5 !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #1c1e21 !important;
+  transition: background-color 0.15s ease, filter 0.15s ease;
+  overflow: visible !important;
+}
+
+.qmNotifToggle:hover,
+.qmNotifToggle:focus,
+.qmNotifToggle:active,
+.qmNotifToggle.show {
+  background: #e4e6eb !important;
+  color: #1c1e21 !important;
+}
+
+.qmNotifToggle::after {
+  display: none !important;
+}
+
+.qmNotifBellIcon {
+  font-size: 1.125rem;
+}
+
+.qmNotifBadge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  z-index: 2;
+  box-sizing: border-box;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background: linear-gradient(160deg, #ff5c7a 0%, #e11d48 45%, #be123c 100%);
+  border-radius: 999px;
+  border: 2px solid #f0f2f5;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.14),
+    0 0 0 1px rgba(190, 18, 60, 0.12);
+  text-align: center;
+  pointer-events: none;
+  transform: translateZ(0);
+}
+
+.qmNotifBadgeWide {
+  min-width: 1.25rem;
+  padding: 0 6px;
+  font-size: 9.5px;
+}
+
+.qmNotifMenu {
+  width: 360px;
+  max-width: calc(100vw - 24px);
+  padding: 0 !important;
+  margin-top: 0.5rem !important;
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.qmNotifMenuHeader {
+  padding: 1rem 1rem 0.875rem;
+  border-bottom: 1px solid #e4e6eb;
+  background: linear-gradient(180deg, #fafbfc 0%, #fff 100%);
+}
+
+.qmNotifHeaderText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.qmNotifMenuTitle {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: #1c1e21;
+  margin: 0;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.qmNotifHeaderSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.125rem 0.25rem;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  margin-top: 0.125rem;
+}
+
+.qmNotifHeaderTotal {
+  font-weight: 700;
+  color: #1c1e21;
+  font-variant-numeric: tabular-nums;
+}
+
+.qmNotifHeaderTotalLabel {
+  font-weight: 500;
+  color: #65676b;
+}
+
+.qmNotifHeaderSep {
+  color: #bcc0c4;
+  user-select: none;
+}
+
+.qmNotifHeaderUnread {
+  font-weight: 600;
+  color: #1877f2;
+  font-variant-numeric: tabular-nums;
+}
+
+.qmNotifHeaderAllRead {
+  font-weight: 500;
+  color: #65676b;
+}
+
+.qmNotifSettingsLink {
+  border-radius: 8px;
+  line-height: 1;
+  margin-top: 2px;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.qmNotifSettingsLink:hover {
+  background: #f0f2f5;
+  color: #1c1e21 !important;
+}
+
+.qmNotifListWrap {
+  max-height: min(360px, 55vh);
+  overflow-y: auto;
+  background: #fff;
+}
+
+.qmNotifItem {
+  padding: 0.875rem 1rem !important;
+  cursor: pointer;
+  background: #fff !important;
+  transition: background-color 0.12s ease;
+}
+
+.qmNotifItem:hover {
+  background: #f2f3f5 !important;
+}
+
+.qmNotifItemUnread {
+  background: #f0f7ff !important;
+  box-shadow: inset 3px 0 0 0 #1877f2;
+}
+
+.qmNotifItemUnread:hover {
+  background: #e8f2fe !important;
+}
+
+.qmNotifIconWrap {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #e8f2fe 0%, #dbeafe 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.qmNotifTitle {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #1c1e21;
+  letter-spacing: -0.01em;
+}
+
+.qmNotifBody {
+  font-size: 0.8125rem;
+  color: #65676b;
+  margin-top: 0.1875rem;
+  line-height: 1.35;
+}
+
+.qmNotifTime {
+  font-size: 0.75rem;
+  color: #8a8d91;
+  margin-top: 0.375rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.qmNotifUnreadDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #1877f2;
+  flex-shrink: 0;
+  margin-top: 6px;
+  box-shadow: 0 0 0 2px rgba(24, 119, 242, 0.25);
+}
+
+.qmNotifFooter {
+  padding: 0.625rem 1rem 0.75rem;
+  border-top: 1px solid #e4e6eb;
+  background: #fafbfc;
+}
+
+.qmNotifFooterActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem 0.5rem;
+}
+
+.qmNotifFooterSep {
+  color: #bcc0c4;
+  font-size: 0.75rem;
+  user-select: none;
+  padding: 0 0.125rem;
+}
+
+.qmNotifMarkAll {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none !important;
+  padding: 0.25rem 0.5rem !important;
+  color: #1877f2 !important;
+  border-radius: 6px;
+  transition: background-color 0.12s ease;
+}
+
+.qmNotifMarkAll:hover {
+  background: rgba(24, 119, 242, 0.08) !important;
+  color: #0d6efd !important;
+}
+
+.qmNotifClearAll {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none !important;
+  padding: 0.25rem 0.5rem !important;
+  color: #c0392b !important;
+  border-radius: 6px;
+  transition: background-color 0.12s ease;
+}
+
+.qmNotifClearAll:hover {
+  background: rgba(192, 57, 43, 0.08) !important;
+  color: #a93226 !important;
+}
+

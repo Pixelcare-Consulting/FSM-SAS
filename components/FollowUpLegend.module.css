@@ -1,0 +1,94 @@
+.legendContainer {
+  background-color: #f8fafc;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.legendSection {
+  margin-bottom: 16px;
+}
+
+.legendTitle {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 12px;
+}
+
+.legendItems {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.813rem;
+  color: #475569;
+}
+
+.priorityIndicator {
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+}
+
+.legendTrigger {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+}
+
+.infoButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #64748b;
+  padding: 4px 8px;
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+.infoButton:hover {
+  color: #334155;
+}
+
+.legendHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.helpIcon {
+  font-size: 1.2rem;
+  color: #6c757d;
+}
+
+.legendHeaderText {
+  color: #6c757d;
+  font-weight: 500;
+}
+
+.legendHeader:hover .helpIcon,
+.legendHeader:hover .legendHeaderText {
+  color: #495057;
+}
+
+.legendItemsMultiColumn {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+

@@ -1,0 +1,718 @@
+/* Notification-style block for portal workflow tips */
+.workflowNotification {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  background: #f0f4ff;
+  border: 1px solid rgba(65, 113, 245, 0.2);
+  border-left: 4px solid #4171f5;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.workflowNotificationIcon {
+  flex-shrink: 0;
+  font-size: 1.375rem;
+  color: #4171f5;
+  margin-top: 0.125rem;
+}
+
+.workflowNotificationContent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.workflowNotificationTitle {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #212529;
+  letter-spacing: -0.02em;
+}
+
+.workflowNotificationText {
+  font-size: 0.9375rem;
+  color: #495057;
+  line-height: 1.5;
+}
+
+.supportCard {
+  border: none;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(65, 113, 245, 0.15);
+  overflow: hidden;
+  transition: box-shadow 0.25s ease, transform 0.2s ease;
+}
+
+.supportCard:hover {
+  box-shadow: 0 8px 28px rgba(65, 113, 245, 0.2);
+}
+
+.supportHeader {
+  background: linear-gradient(135deg, #4171f5 0%, #3daaf5 100%);
+  padding: 1.25rem 1.5rem;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+
+.supportBody {
+  padding: 1.5rem;
+  background: #fff;
+}
+
+.supportText {
+  font-size: 0.9375rem;
+  color: #495057;
+  line-height: 1.55;
+  margin-bottom: 1.25rem;
+}
+
+.supportButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #4171f5 0%, #3daaf5 100%);
+  border: none;
+  border-radius: 10px;
+  text-decoration: none;
+  box-shadow: 0 2px 8px rgba(65, 113, 245, 0.35);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.supportButton:hover {
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(65, 113, 245, 0.4);
+  transform: translateY(-1px);
+}
+
+.supportButton:active {
+  transform: translateY(0);
+}
+
+.mainCol {
+  margin-bottom: 1.5rem;
+}
+
+.sectionBlock {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e9ecef;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #212529;
+  margin: 0 0 0.5rem 0;
+  letter-spacing: -0.02em;
+}
+
+.sectionTitleIcon {
+  font-size: 1.25rem;
+  color: #4171f5;
+  flex-shrink: 0;
+}
+
+.sectionIntro {
+  font-size: 0.9375rem;
+  color: #495057;
+  line-height: 1.5;
+  margin: 0 0 1.25rem 0;
+}
+
+.faqCategory {
+  margin-bottom: 2rem;
+}
+
+.faqCategory:last-child {
+  margin-bottom: 0;
+}
+
+.faqCategoryTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #212529;
+  margin: 0 0 0.75rem 0;
+  letter-spacing: -0.01em;
+}
+
+.faqCategoryIcon {
+  font-size: 1.0625rem;
+  color: #4171f5;
+  flex-shrink: 0;
+}
+
+.quickLinksCard {
+  border: none;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  margin-bottom: 1.25rem;
+  transition: box-shadow 0.25s ease;
+}
+
+.quickLinksCard:hover {
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
+}
+
+.quickLinksHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #212529;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.quickLinksHeaderIcon {
+  font-size: 1rem;
+  color: #4171f5;
+  flex-shrink: 0;
+}
+
+.quickLinksBody {
+  padding: 1rem 1.25rem;
+  background: #fff;
+}
+
+.quickLinksList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.quickLinksItem {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.quickLinksLink {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #4171f5;
+  text-decoration: none;
+  transition: color 0.2s ease, text-decoration 0.2s ease;
+}
+
+.quickLinksLink:hover {
+  color: #2d5ad4;
+  text-decoration: underline;
+}
+
+.quickLinksDesc {
+  font-size: 0.8125rem;
+  color: #6c757d;
+  line-height: 1.4;
+}
+
+.sidebarCol {
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 992px) {
+  .sidebarCol {
+    position: sticky;
+    top: 1rem;
+  }
+}
+
+/* Navigation map */
+.navMapGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.navMapSection {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e9ecef;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.navMapSectionTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #212529;
+  margin: 0 0 0.25rem 0;
+}
+
+.navMapSectionDesc {
+  font-size: 0.875rem;
+  color: #6c757d;
+  margin: 0 0 1rem 0;
+}
+
+.navMapTableWrap {
+  overflow-x: auto;
+}
+
+.navMapTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.navMapTable th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+  color: #495057;
+  border-bottom: 2px solid #e9ecef;
+  white-space: nowrap;
+}
+
+.navMapTable td {
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid #f1f3f5;
+  vertical-align: top;
+}
+
+.navMapLabel {
+  font-weight: 600;
+  color: #212529;
+  white-space: nowrap;
+}
+
+.navMapRoute {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
+}
+
+.navMapLink {
+  color: #4171f5;
+  text-decoration: none;
+}
+
+.navMapLink:hover {
+  text-decoration: underline;
+}
+
+.navMapMuted {
+  color: #adb5bd;
+  font-style: italic;
+}
+
+.navMapDesc {
+  color: #495057;
+  line-height: 1.45;
+}
+
+.adminBadge,
+.newBadge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.125rem 0.4rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+.adminBadge {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.newBadge {
+  background: rgba(65, 113, 245, 0.12);
+  color: #4171f5;
+}
+
+/* Workflows */
+.workflowGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .workflowGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.workflowCard {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e9ecef;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.workflowCard:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: #dee2e6;
+}
+
+.workflowCardHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.workflowNumber {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #4171f5 0%, #3daaf5 100%);
+  border-radius: 8px;
+}
+
+.workflowTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #212529;
+  margin: 0 0 0.25rem 0;
+}
+
+.workflowDesc {
+  font-size: 0.875rem;
+  color: #6c757d;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.workflowSteps {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.workflowStep {
+  font-size: 0.9375rem;
+  color: #495057;
+  line-height: 1.5;
+}
+
+.workflowLink {
+  display: inline-block;
+  margin-left: 0.35rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #4171f5;
+  text-decoration: none;
+}
+
+.workflowLink:hover {
+  text-decoration: underline;
+}
+
+/* Role guide section wrapper */
+.roleGuideBlock {
+  margin-bottom: 0;
+}
+
+.footerNote {
+  margin-top: 2rem;
+  padding: 1rem 1.25rem;
+  font-size: 0.875rem;
+  color: #6c757d;
+  background: #f8f9fa;
+  border-radius: 10px;
+  border: 1px solid #e9ecef;
+  line-height: 1.5;
+}
+
+.footerNote code {
+  font-size: 0.8125rem;
+  color: #495057;
+}
+
+/* Navigation map */
+.navSection {
+  margin-bottom: 1.5rem;
+}
+
+.navSectionTitle {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #495057;
+  margin: 0 0 0.25rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.navSectionDesc {
+  font-size: 0.8125rem;
+  color: #6c757d;
+  margin: 0 0 0.75rem 0;
+}
+
+.navCardLinkStatic {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #212529;
+}
+
+.navBadge {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.125rem 0.5rem;
+  background: #d4edda;
+  color: #155724;
+  border-radius: 4px;
+}
+
+.navGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.75rem;
+}
+
+.navCard {
+  padding: 0.875rem 1rem;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.navCard:hover {
+  border-color: rgba(65, 113, 245, 0.35);
+  box-shadow: 0 2px 8px rgba(65, 113, 245, 0.08);
+}
+
+.navCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.375rem;
+}
+
+.navCardLink {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #4171f5;
+  text-decoration: none;
+}
+
+.navCardLink:hover {
+  color: #2d5ad4;
+  text-decoration: underline;
+}
+
+.adminBadge {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.125rem 0.5rem;
+  background: #fff3cd;
+  color: #856404;
+  border-radius: 4px;
+}
+
+.navCardDesc {
+  font-size: 0.8125rem;
+  color: #6c757d;
+  line-height: 1.45;
+  margin: 0 0 0.375rem 0;
+}
+
+.navCardRoute {
+  font-size: 0.75rem;
+  color: #868e96;
+  background: #fff;
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+}
+
+/* Role guide */
+.roleAccordion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.roleCard {
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.roleCardOpen {
+  border-color: rgba(65, 113, 245, 0.35);
+  box-shadow: 0 2px 8px rgba(65, 113, 245, 0.08);
+}
+
+.roleTrigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.875rem 1rem;
+  background: #f8f9fa;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #212529;
+}
+
+.roleTrigger:hover {
+  background: #f0f4ff;
+}
+
+.roleChevron {
+  font-size: 0.75rem;
+  color: #6c757d;
+}
+
+.roleSectionIcon {
+  font-size: 1rem;
+  color: #4171f5;
+}
+
+.roleContent {
+  padding: 0 1rem 1rem 1rem;
+}
+
+.roleDescription {
+  font-size: 0.875rem;
+  color: #6c757d;
+  margin: 0.5rem 0 0.75rem 0;
+}
+
+.roleList {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.875rem;
+  color: #495057;
+  line-height: 1.55;
+}
+
+.roleList li {
+  margin-bottom: 0.375rem;
+}
+
+.roleNote {
+  font-size: 0.8125rem;
+  color: #6c757d;
+  margin: 1rem 0 0 0;
+  line-height: 1.5;
+}
+
+.roleNote a {
+  color: #4171f5;
+}
+
+/* Workflows */
+.workflowGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.workflowCard {
+  padding: 1rem 1.125rem;
+  background: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.workflowCardHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.workflowIcon {
+  font-size: 1.125rem;
+  color: #4171f5;
+}
+
+.workflowTitle {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #212529;
+  margin: 0;
+}
+
+.workflowDescription {
+  font-size: 0.8125rem;
+  color: #6c757d;
+  margin: 0 0 0.625rem 0;
+  line-height: 1.45;
+}
+
+.workflowSteps {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.875rem;
+  color: #495057;
+  line-height: 1.55;
+}
+
+.workflowStep {
+  margin-bottom: 0.375rem;
+}
+
+.workflowStep a {
+  color: #4171f5;
+  text-decoration: none;
+}
+
+.workflowStep a:hover {
+  text-decoration: underline;
+}
+
+.docsFooter {
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #e9ecef;
+  font-size: 0.8125rem;
+  color: #6c757d;
+  line-height: 1.5;
+}
+
+.docsFooter code {
+  font-size: 0.8125rem;
+  background: #f8f9fa;
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+}

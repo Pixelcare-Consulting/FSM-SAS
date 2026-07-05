@@ -1,0 +1,69 @@
+/* Shared typography for Quill HTML rendered outside the editor (read mode, tables). */
+.richTextContent {
+  line-height: 1.6;
+  word-wrap: break-word;
+}
+
+.richTextContent p {
+  margin: 0;
+  padding: 0;
+}
+
+.richTextContent ul,
+.richTextContent ol {
+  margin: 0;
+  padding-left: 1.5em;
+}
+
+.richTextContent li {
+  margin: 0;
+  padding: 0;
+}
+
+.richTextContent h1,
+.richTextContent h2,
+.richTextContent h3,
+.richTextContent h4 {
+  margin: 0;
+  padding: 0;
+}
+
+/* Tighter layout for table cells */
+.richTextContentCompact {
+  font-size: 13px;
+  line-height: 1.3;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+.richTextContentCompact p {
+  margin: 0;
+  padding: 0;
+}
+
+.richTextContentCompact p + p {
+  margin-top: 0.1em;
+}
+
+.richTextContentCompact br {
+  line-height: 1.1;
+}
+
+.richTextContentCompact ul,
+.richTextContentCompact ol {
+  margin: 0;
+  padding-left: 1.5em;
+}
+
+.richTextContentCompact li {
+  margin: 0;
+  padding: 0;
+}
+
+.richTextContentCompact h1,
+.richTextContentCompact h2,
+.richTextContentCompact h3,
+.richTextContentCompact h4 {
+  margin: 0;
+  padding: 0;
+}

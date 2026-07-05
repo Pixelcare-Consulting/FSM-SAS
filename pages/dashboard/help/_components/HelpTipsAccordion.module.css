@@ -1,0 +1,172 @@
+.accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.card {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e9ecef;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: #dee2e6;
+}
+
+.cardOpen {
+  box-shadow: 0 4px 16px rgba(65, 113, 245, 0.12);
+  border-color: rgba(65, 113, 245, 0.25);
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 1rem 1.25rem;
+  background: #f8f9fa;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #212529;
+  transition: background-color 0.2s ease;
+}
+
+.trigger:hover {
+  background: #eff1f3;
+}
+
+.cardOpen .trigger {
+  background: rgba(65, 113, 245, 0.08);
+  color: #4171f5;
+}
+
+.triggerIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  color: #6c757d;
+  flex-shrink: 0;
+}
+
+.cardOpen .triggerIcon {
+  color: #4171f5;
+}
+
+.chevron {
+  font-size: 0.875rem;
+  transition: transform 0.2s ease;
+}
+
+.sectionIcon {
+  font-size: 1.125rem;
+  color: #4171f5;
+  flex-shrink: 0;
+}
+
+.triggerTitle {
+  flex: 1;
+}
+
+.openLink {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #4171f5;
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #4171f5;
+  text-decoration: none;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.openLink:hover {
+  background: #4171f5;
+  color: #fff;
+}
+
+.content {
+  padding: 0 1.25rem 1.25rem 1.25rem;
+  padding-left: calc(1.25rem + 24px + 0.75rem);
+}
+
+@media (max-width: 576px) {
+  .content {
+    padding-left: 1.25rem;
+  }
+}
+
+.itemList {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.item {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.item:last-child {
+  border-bottom: none;
+}
+
+.itemLabel {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: #4171f5;
+  text-decoration: none;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.itemLabel:hover {
+  text-decoration: underline;
+}
+
+.itemTip {
+  display: block;
+  font-size: 0.875rem;
+  color: #6c757d;
+  line-height: 1.45;
+}
+
+.tipList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tip {
+  font-size: 0.9375rem;
+  color: #495057;
+  line-height: 1.5;
+  padding-left: 1rem;
+  position: relative;
+}
+
+.tip::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.6em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #4171f5;
+  opacity: 0.7;
+}

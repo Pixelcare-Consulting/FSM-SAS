@@ -1,0 +1,95 @@
+.faqAccordion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.faqCard {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e9ecef;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.faqCard:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: #dee2e6;
+}
+
+.faqCardOpen {
+  box-shadow: 0 4px 16px rgba(65, 113, 245, 0.12);
+  border-color: rgba(65, 113, 245, 0.25);
+}
+
+.faqTrigger {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 1rem 1.25rem;
+  background: #f8f9fa;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #212529;
+  transition: background-color 0.2s ease;
+}
+
+.faqTrigger:hover {
+  background: #eff1f3;
+}
+
+.faqCardOpen .faqTrigger {
+  background: rgba(65, 113, 245, 0.08);
+  color: #4171f5;
+}
+
+.faqTriggerIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  color: #6c757d;
+  flex-shrink: 0;
+}
+
+.faqCardOpen .faqTriggerIcon {
+  color: #4171f5;
+}
+
+.chevron {
+  font-size: 0.875rem;
+  transition: transform 0.2s ease;
+}
+
+.faqIcon {
+  font-size: 1.125rem;
+  color: #4171f5;
+  flex-shrink: 0;
+}
+
+.faqQuestion {
+  flex: 1;
+}
+
+.faqContent {
+  padding: 0 1.25rem 1.25rem 1.25rem;
+  padding-left: calc(1.25rem + 24px + 0.75rem);
+}
+
+@media (max-width: 576px) {
+  .faqContent {
+    padding-left: 1.25rem;
+  }
+}
+
+.faqAnswer {
+  font-size: 0.9375rem;
+  color: #495057;
+  line-height: 1.6;
+  margin: 0;
+}

@@ -1,0 +1,453 @@
+.companyLogoContainer {
+  width: 200px;
+  height: 200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed #dee2e6;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.placeholderLogo {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f8f9fa;
+}
+
+.companyInfoTable th {
+  font-weight: 600;
+  padding: 12px 8px;
+  vertical-align: top;
+}
+
+.companyInfoTable td {
+  padding: 12px 8px;
+}
+
+.companyInfoTable tr:not(:last-child) {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.card {
+  border: none;
+  box-shadow: 0 0 10px rgba(0,0,0,0.05);
+}
+
+.cardHeader {
+  border-bottom: none;
+  padding: 1rem 1.25rem;
+}
+
+.cardBody {
+  padding: 1.5rem;
+}
+
+.settingsCategory {
+  border-bottom: 1px solid #eee;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.settingsItem {
+  transition: all 0.2s;
+}
+
+.settingsItem:hover {
+  background-color: #f8f9fa;
+}
+
+.settingsItem.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* —— Settings: left nav — section labels vs clickable rows (tiles + chevron) —— */
+@media (min-width: 992px) {
+  .settingsSidebarSticky {
+    position: sticky;
+    top: 1rem;
+    align-self: flex-start;
+  }
+}
+
+.settingsNav {
+  padding: 1.5rem 1.15rem 1.6rem;
+  margin-bottom: 1.25rem;
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.045);
+}
+
+@media (min-width: 992px) {
+  .settingsNav {
+    padding: 1.6rem 1.25rem 1.65rem;
+    margin-right: 0.5rem;
+    margin-bottom: 0;
+  }
+}
+
+.navSection {
+  margin-bottom: 0;
+}
+
+/* Space between category blocks (no rule above following section headers) */
+.navSection:not(:last-child) {
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.navSection:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.navSectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.55rem;
+  margin-bottom: 0.65rem;
+  border-radius: 0.375rem;
+  border: none;
+  background: var(--bs-tertiary-bg, #f1f3f5);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--bs-secondary-color);
+}
+
+.navSection:first-child .navSectionHeader {
+  padding-top: 0.4rem;
+}
+
+.navSectionHeaderIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--bs-secondary-color);
+  opacity: 0.72;
+}
+
+.navSectionHeaderIcon :global(svg) {
+  font-size: 0.82rem;
+}
+
+.navSectionTitle {
+  flex: 1;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.navSectionItems {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.navItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.55rem 0.65rem 0.65rem;
+  transition:
+    background-color 0.14s ease,
+    border-color 0.14s ease,
+    box-shadow 0.14s ease;
+  cursor: pointer;
+  color: inherit;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.navItem:hover:not(:disabled) {
+  background: rgba(var(--bs-primary-rgb, 13, 110, 253), 0.06);
+  border-color: rgba(var(--bs-primary-rgb, 13, 110, 253), 0.38);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.navItem:focus-visible {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: 2px;
+}
+
+.navItem:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.navItemActive {
+  background: rgba(var(--bs-primary-rgb, 13, 110, 253), 0.09);
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 1px rgba(var(--bs-primary-rgb, 13, 110, 253), 0.35);
+}
+
+.navItemActive:hover:not(:disabled) {
+  background: rgba(var(--bs-primary-rgb, 13, 110, 253), 0.11);
+  border-color: var(--bs-primary);
+}
+
+.navItemLeading {
+  flex-shrink: 0;
+  width: 1.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 0.14rem;
+  color: var(--bs-primary);
+}
+
+.navItemLeading :global(svg) {
+  font-size: 1rem;
+}
+
+.navItemActive .navItemLeading {
+  color: var(--bs-primary);
+}
+
+.navItemText {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.navSectionHeader :global(svg.me-2),
+.navItem :global(svg.me-2) {
+  margin-right: 0 !important;
+}
+
+.navItemTitleRow {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.navItemTitle {
+  display: inline;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  letter-spacing: -0.015em;
+  color: var(--bs-body-color);
+}
+
+.navItemPromoBadge {
+  font-size: 0.625rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em;
+  padding: 0.28em 0.55em !important;
+  line-height: 1 !important;
+  flex-shrink: 0;
+  vertical-align: middle;
+  transform: translateY(-1px);
+  box-shadow: 0 1px 2px rgba(13, 110, 253, 0.25);
+}
+
+.navItemActive .navItemTitleRow .navItemTitle {
+  font-weight: 700;
+  color: var(--bs-primary);
+  text-decoration: none;
+}
+
+.navItemChevron {
+  flex-shrink: 0;
+  align-self: center;
+  margin-left: auto;
+  padding-left: 0.35rem;
+  font-size: 0.7rem;
+  color: var(--bs-secondary-color);
+  opacity: 0.55;
+  transition: color 0.14s ease, opacity 0.14s ease, transform 0.14s ease;
+}
+
+.navItem:hover:not(:disabled) .navItemChevron {
+  color: var(--bs-primary);
+  opacity: 1;
+}
+
+.navItemActive .navItemChevron {
+  color: var(--bs-primary);
+  opacity: 1;
+}
+
+.navItem:disabled .navItemChevron {
+  opacity: 0.35;
+}
+
+.navItemDesc {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--bs-secondary-color);
+  line-height: 1.45;
+  margin-top: 0.18rem;
+  font-weight: 400;
+}
+
+.navItemBadge {
+  margin-top: 0.35rem;
+}
+
+/* Email settings panel: use full card body width */
+.emailSettingsContentWell {
+  width: 100%;
+}
+
+/* Job incentives: prose / alerts match email panel width; tables stay full width of card */
+.incentivesIntroWell {
+  max-width: 42rem;
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* React Quill — rich email template body */
+.emailSettingsQuill :global(.ql-toolbar.ql-snow) {
+  border-radius: 0.5rem 0.5rem 0 0;
+  border-color: var(--bs-border-color);
+  font-family: system-ui, sans-serif;
+}
+
+.emailSettingsQuill :global(.ql-container.ql-snow) {
+  border-radius: 0 0 0.5rem 0.5rem;
+  border-color: var(--bs-border-color);
+  font-size: 15px;
+  min-height: 200px;
+}
+
+.emailSettingsQuill :global(.ql-editor) {
+  min-height: 200px;
+}
+
+/* Match outbound email typography (see applyInlineEmailBodyTypography) */
+.emailSettingsQuill :global(.ql-editor p) {
+  margin: 0 0 6px 0;
+  line-height: 1.45;
+}
+
+.emailSettingsQuill :global(.ql-editor h1),
+.emailSettingsQuill :global(.ql-editor h2),
+.emailSettingsQuill :global(.ql-editor h3),
+.emailSettingsQuill :global(.ql-editor h4) {
+  margin: 0 0 6px 0;
+  line-height: 1.25;
+}
+
+.emailSettingsQuill :global(.ql-editor ul),
+.emailSettingsQuill :global(.ql-editor ol) {
+  margin: 0 0 8px 0;
+  padding-left: 1.25em;
+}
+
+.emailSettingsQuill :global(.ql-editor li) {
+  margin: 0 0 2px 0;
+  line-height: 1.45;
+}
+
+.breadcrumbContainer {
+  background: transparent;
+  padding: 0;
+  margin-bottom: 1rem;
+}
+
+.breadcrumbContainer :global(.breadcrumb) {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.breadcrumbContainer :global(.breadcrumb-item + .breadcrumb-item::before) {
+  color: #6c757d;
+}
+
+.breadcrumbContainer :global(.breadcrumb-item.active) {
+  color: #495057;
+}
+
+.breadcrumbContainer a {
+  color: #0d6efd;
+  text-decoration: none;
+}
+
+.breadcrumbContainer a:hover {
+  text-decoration: underline;
+}
+
+.followUpContainer {
+  padding: 1rem;
+}
+
+.taskCard {
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.cardHeader {
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+  padding: 1rem;
+}
+
+.cardBody {
+  padding: 1.5rem;
+}
+
+.addTypeForm {
+  margin-bottom: 2rem;
+}
+
+.colorPicker {
+  width: 60px !important;
+  padding: 0.375rem;
+  height: 38px;
+}
+
+.addButton {
+  flex-grow: 1;
+}
+
+.typesList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.typeItem {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem;
+  background-color: #f8f9fa;
+  border-radius: 0.5rem;
+  border: 1px solid #e9ecef;
+}
+
+.colorBox {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.typeName {
+  font-weight: 500;
+}
+
+.typeActions {
+  display: flex;
+  gap: 0.5rem;
+}

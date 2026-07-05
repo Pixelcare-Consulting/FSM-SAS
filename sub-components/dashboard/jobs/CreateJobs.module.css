@@ -1,0 +1,56 @@
+.submitButton {
+    min-width: 120px;
+    position: relative;
+  }
+  
+  .submitButton:disabled {
+    cursor: not-allowed;
+  }
+  
+  .loadingOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  
+  .loadingSpinner {
+    width: 50px;
+    height: 50px;
+  }
+
+  .custom-swal-container {
+    z-index: 9999;
+  }
+  
+  .custom-swal-popup {
+    padding: 2rem;
+    border-radius: 15px;
+  }
+  
+  .custom-swal-title {
+    color: #28a745;
+    font-size: 1.5rem;
+  }
+  
+  .custom-swal-html {
+    margin-top: 1rem;
+  }
+  
+  .custom-swal-html ul li {
+    margin-bottom: 0.5rem;
+    color: #333;
+  }
+  
+  .custom-swal-confirm-button {
+    padding: 0.75rem 1.5rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
