@@ -8,6 +8,80 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- =============================================
+-- DROP EXISTING OBJECTS (idempotent re-run)
+-- =============================================
+
+DROP TABLE IF EXISTS
+    user_migration_upload,
+    calendar_events,
+    technician_other_details,
+    technician_documents,
+    technician_schedules,
+    payroll_disbursements,
+    payroll_entries,
+    payroll_periods,
+    technician_payroll_profiles,
+    technician_access_settings,
+    technician_employment_details,
+    email_template_versions,
+    email_template_overrides,
+    email_trigger_bindings,
+    email_templates,
+    email_triggers,
+    job_incentive_detail_results,
+    job_incentive_results,
+    job_migration_upload,
+    job_technician_admin_messages,
+    job_email_log,
+    job_sync_logs,
+    google_forms,
+    company_memos,
+    company_details,
+    settings,
+    scheduling_windows,
+    followups,
+    technicians_schedule,
+    attendance,
+    job_signatures,
+    job_media,
+    task_completions,
+    job_tasks,
+    technician_hours,
+    technician_jobs,
+    job_equipments,
+    job_schedule,
+    job_status,
+    job_subject_options,
+    job_contact_type_options,
+    job_category,
+    job_contact_type,
+    job_payments,
+    jobs,
+    payment_profiles,
+    location_technicians,
+    sap_lead_contact,
+    sap_lead_location,
+    sap_lead,
+    leads,
+    service_call,
+    sales_order,
+    sales_quotation,
+    equipments,
+    contacts,
+    customer_creation_drafts,
+    customer_notes,
+    customer_address_details,
+    customer_location,
+    locations,
+    customer,
+    technicians,
+    notifications,
+    recent_activities,
+    audit_logs,
+    users
+CASCADE;
+
+-- =============================================
 -- TABLES
 -- =============================================
 
@@ -333,6 +407,7 @@ CREATE TABLE leads (
 );
 
 -- Circular FK: customer.lead_id → leads (leads table now exists)
+ALTER TABLE customer DROP CONSTRAINT IF EXISTS customer_lead_id_fkey;
 ALTER TABLE customer
     ADD CONSTRAINT customer_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES leads(id);
 
@@ -1719,159 +1794,208 @@ $$;
 -- =============================================
 
 -- updated_at triggers (existing tables)
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_technicians_updated_at ON technicians;
 CREATE TRIGGER update_technicians_updated_at BEFORE UPDATE ON technicians
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_customer_updated_at ON customer;
 CREATE TRIGGER update_customer_updated_at BEFORE UPDATE ON customer
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_locations_updated_at ON locations;
 CREATE TRIGGER update_locations_updated_at BEFORE UPDATE ON locations
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_equipments_updated_at ON equipments;
 CREATE TRIGGER update_equipments_updated_at BEFORE UPDATE ON equipments
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_sales_quotation_updated_at ON sales_quotation;
 CREATE TRIGGER update_sales_quotation_updated_at BEFORE UPDATE ON sales_quotation
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_sales_order_updated_at ON sales_order;
 CREATE TRIGGER update_sales_order_updated_at BEFORE UPDATE ON sales_order
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_service_call_updated_at ON service_call;
 CREATE TRIGGER update_service_call_updated_at BEFORE UPDATE ON service_call
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_leads_updated_at ON leads;
 CREATE TRIGGER update_leads_updated_at BEFORE UPDATE ON leads
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_jobs_updated_at ON jobs;
 CREATE TRIGGER update_jobs_updated_at BEFORE UPDATE ON jobs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_job_schedule_updated_at ON job_schedule;
 CREATE TRIGGER update_job_schedule_updated_at BEFORE UPDATE ON job_schedule
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_technician_jobs_updated_at ON technician_jobs;
 CREATE TRIGGER update_technician_jobs_updated_at BEFORE UPDATE ON technician_jobs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_task_completions_updated_at ON task_completions;
 CREATE TRIGGER update_task_completions_updated_at BEFORE UPDATE ON task_completions
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_attendance_updated_at ON attendance;
 CREATE TRIGGER update_attendance_updated_at BEFORE UPDATE ON attendance
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_followups_updated_at ON followups;
 CREATE TRIGGER update_followups_updated_at BEFORE UPDATE ON followups
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_scheduling_windows_updated_at ON scheduling_windows;
 CREATE TRIGGER update_scheduling_windows_updated_at BEFORE UPDATE ON scheduling_windows
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_settings_updated_at ON settings;
 CREATE TRIGGER update_settings_updated_at BEFORE UPDATE ON settings
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_company_details_updated_at ON company_details;
 CREATE TRIGGER update_company_details_updated_at BEFORE UPDATE ON company_details
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_company_memos_updated_at ON company_memos;
 CREATE TRIGGER update_company_memos_updated_at BEFORE UPDATE ON company_memos
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_google_forms_updated_at ON google_forms;
 CREATE TRIGGER update_google_forms_updated_at BEFORE UPDATE ON google_forms
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_job_media_updated_at ON job_media;
 CREATE TRIGGER update_job_media_updated_at BEFORE UPDATE ON job_media
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- updated_at triggers (new tables)
+DROP TRIGGER IF EXISTS update_notifications_updated_at ON notifications;
 CREATE TRIGGER update_notifications_updated_at BEFORE UPDATE ON notifications
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_customer_address_details_updated_at ON customer_address_details;
 CREATE TRIGGER update_customer_address_details_updated_at BEFORE UPDATE ON customer_address_details
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_customer_notes_updated_at ON customer_notes;
 CREATE TRIGGER update_customer_notes_updated_at BEFORE UPDATE ON customer_notes
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_customer_creation_drafts_updated_at ON customer_creation_drafts;
 CREATE TRIGGER update_customer_creation_drafts_updated_at BEFORE UPDATE ON customer_creation_drafts
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_payment_profiles_updated_at ON payment_profiles;
 CREATE TRIGGER update_payment_profiles_updated_at BEFORE UPDATE ON payment_profiles
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_sap_lead_updated_at ON sap_lead;
 CREATE TRIGGER update_sap_lead_updated_at BEFORE UPDATE ON sap_lead
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_job_migration_upload_updated_at ON job_migration_upload;
 CREATE TRIGGER update_job_migration_upload_updated_at BEFORE UPDATE ON job_migration_upload
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_job_incentive_results_updated_at ON job_incentive_results;
 CREATE TRIGGER update_job_incentive_results_updated_at BEFORE UPDATE ON job_incentive_results
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_email_triggers_updated_at ON email_triggers;
 CREATE TRIGGER update_email_triggers_updated_at BEFORE UPDATE ON email_triggers
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_email_templates_updated_at ON email_templates;
 CREATE TRIGGER update_email_templates_updated_at BEFORE UPDATE ON email_templates
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_email_trigger_bindings_updated_at ON email_trigger_bindings;
 CREATE TRIGGER update_email_trigger_bindings_updated_at BEFORE UPDATE ON email_trigger_bindings
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_email_template_overrides_updated_at ON email_template_overrides;
 CREATE TRIGGER update_email_template_overrides_updated_at BEFORE UPDATE ON email_template_overrides
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_technician_employment_details_updated_at ON technician_employment_details;
 CREATE TRIGGER update_technician_employment_details_updated_at BEFORE UPDATE ON technician_employment_details
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_technician_access_settings_updated_at ON technician_access_settings;
 CREATE TRIGGER update_technician_access_settings_updated_at BEFORE UPDATE ON technician_access_settings
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_technician_payroll_profiles_updated_at ON technician_payroll_profiles;
 CREATE TRIGGER update_technician_payroll_profiles_updated_at BEFORE UPDATE ON technician_payroll_profiles
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_job_payments_updated_at ON job_payments;
 CREATE TRIGGER update_job_payments_updated_at BEFORE UPDATE ON job_payments
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_payroll_periods_updated_at ON payroll_periods;
 CREATE TRIGGER update_payroll_periods_updated_at BEFORE UPDATE ON payroll_periods
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_payroll_entries_updated_at ON payroll_entries;
 CREATE TRIGGER update_payroll_entries_updated_at BEFORE UPDATE ON payroll_entries
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_payroll_disbursements_updated_at ON payroll_disbursements;
 CREATE TRIGGER update_payroll_disbursements_updated_at BEFORE UPDATE ON payroll_disbursements
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_technician_schedules_updated_at ON technician_schedules;
 CREATE TRIGGER update_technician_schedules_updated_at BEFORE UPDATE ON technician_schedules
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_technician_documents_updated_at ON technician_documents;
 CREATE TRIGGER update_technician_documents_updated_at BEFORE UPDATE ON technician_documents
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_technician_other_details_updated_at ON technician_other_details;
 CREATE TRIGGER update_technician_other_details_updated_at BEFORE UPDATE ON technician_other_details
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_calendar_events_updated_at ON calendar_events;
 CREATE TRIGGER update_calendar_events_updated_at BEFORE UPDATE ON calendar_events
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_user_migration_upload_updated_at ON user_migration_upload;
 CREATE TRIGGER update_user_migration_upload_updated_at BEFORE UPDATE ON user_migration_upload
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Attendance duration
+DROP TRIGGER IF EXISTS calculate_duration_before_update ON attendance;
 CREATE TRIGGER calculate_duration_before_update BEFORE UPDATE ON attendance
     FOR EACH ROW EXECUTE FUNCTION calculate_attendance_duration();
 
 -- Technician hours on job completion
+DROP TRIGGER IF EXISTS trg_technician_hours_on_job_completion ON technician_jobs;
 CREATE TRIGGER trg_technician_hours_on_job_completion
   AFTER UPDATE ON technician_jobs
   FOR EACH ROW
   EXECUTE FUNCTION fn_create_technician_hours_on_completion();
 
 -- Leads full_name / address auto-population
+DROP TRIGGER IF EXISTS trigger_update_full_name_from_parts ON leads;
 CREATE TRIGGER trigger_update_full_name_from_parts
     BEFORE INSERT OR UPDATE ON leads
     FOR EACH ROW
     EXECUTE FUNCTION update_full_name_from_parts();
 
 -- Job technician admin messages updated_at
+DROP TRIGGER IF EXISTS trigger_update_job_technician_admin_messages_updated_at ON job_technician_admin_messages;
 CREATE TRIGGER trigger_update_job_technician_admin_messages_updated_at
     BEFORE UPDATE ON job_technician_admin_messages
     FOR EACH ROW
