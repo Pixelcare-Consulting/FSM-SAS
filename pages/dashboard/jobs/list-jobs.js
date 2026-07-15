@@ -1581,7 +1581,11 @@ const ViewJobs = () => {
       });
       const singleRes = await fetch(
         `/api/jobs/list-summary?${singleParams.toString()}`,
-        { cache: 'no-store', credentials: 'same-origin' }
+        {
+          cache: 'no-store',
+          credentials: 'same-origin',
+          headers: { 'X-Client-Source': 'web' },
+        }
       );
 
       if (!singleRes.ok) {

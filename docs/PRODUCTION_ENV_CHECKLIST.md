@@ -70,7 +70,7 @@ Copy values from [`.env.example`](../.env.example) into your deployment target. 
 https://YOUR_APP/api/cron/sync-jobs-to-sap?secret=YOUR_CRON_SECRET
 ```
 
-5. **`vercel.json`** — currently manifest headers only; no auth layer. Page protection uses `proxy.js` / `middleware.js` session indicators + client `useSessionCheck`.
+5. **`vercel.json`** — currently manifest headers only; no auth layer. Page protection uses `proxy.js` session indicators + client `useSessionCheck`.
 
 ---
 

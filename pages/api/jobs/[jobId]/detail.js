@@ -8,6 +8,7 @@ import {
   logResponseSize,
   setListCache,
 } from '../../../../lib/supabase/listQueryHelpers';
+import { withApiMetrics } from '../../../../lib/api/withApiMetrics';
 
 const CACHE_TTL_MS = 45_000;
 const CACHE_PREFIX = 'job-detail:';
@@ -28,7 +29,7 @@ export function invalidateJobDetailCache(jobId) {
  * GET /api/jobs/[jobId]/detail
  * Batched job detail graph for JobDetailsPage (server-side, cached 45s).
  */
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -73,3 +74,5 @@ export default async function handler(req, res) {
     });
   }
 }
+
+export default withApiMetrics(handler);

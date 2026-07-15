@@ -218,7 +218,11 @@ Types:
 
 ## Job Completed Email (Mobile / Webhook)
 
-When a technician signs off on mobile, the app writes directly to Supabase (`job_signatures`, `technician_jobs`). The portal does **not** automatically receive those writes — something must call the completion email endpoint.
+When a technician signs off on mobile, prefer **`POST /api/v1/field/assignments/complete`** (writes labor + optional signature, then runs completion/email). Legacy path: mobile may still write directly to Supabase (`job_signatures`, `technician_jobs`) and then call:
+
+`POST /api/jobs/[jobId]/technician-complete`
+
+See [`docs/MOBILE_BFF_CONTRACT.md`](./MOBILE_BFF_CONTRACT.md).
 
 ### Endpoint
 

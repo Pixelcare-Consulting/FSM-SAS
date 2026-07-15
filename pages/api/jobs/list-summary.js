@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from '../../../lib/supabase/server';
 import { withSession } from '../../../lib/api/withSession';
+import { withApiMetrics } from '../../../lib/api/withApiMetrics';
 import {
   SUPABASE_JOB_LIST_BASE_SELECT,
   formatJobListSummaryRow,
@@ -45,7 +46,7 @@ async function loadCachedJobStatusesForFilter(supabase) {
   return statuses;
 }
 
-export default withSession(async function handler(req, res) {
+export default withApiMetrics(withSession(async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -301,4 +302,4 @@ export default withSession(async function handler(req, res) {
       error: error.message || 'Unable to load jobs summary.',
     });
   }
-});
+}));

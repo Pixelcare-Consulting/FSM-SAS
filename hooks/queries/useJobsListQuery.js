@@ -36,6 +36,7 @@ export async function fetchJobsList(params) {
   const response = await fetch(`/api/jobs/list-summary?${buildJobsListSearchParams(params).toString()}`, {
     cache: 'no-store',
     credentials: 'same-origin',
+    headers: { 'X-Client-Source': 'web' },
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));

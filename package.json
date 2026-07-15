@@ -1,6 +1,6 @@
 {
   "name": "sas-sapb1-portal",
-  "version": "3.15.2",
+  "version": "3.15.8",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack -H 0.0.0.0 -p 4000",
@@ -102,6 +102,7 @@
     "@react-google-maps/api": "^2.20.3",
     "@react-pdf/renderer": "^4.3.1",
     "@reduxjs/toolkit": "^2.2.8",
+    "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.39.0",
     "@syncfusion/ej2-base": "^27.1.53",
     "@syncfusion/ej2-react-buttons": "^27.1.53",

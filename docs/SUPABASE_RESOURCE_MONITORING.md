@@ -36,7 +36,7 @@ Migration files (apply manually in Supabase SQL editor — **do not run during b
 
 | Order | File | Purpose |
 |-------|------|---------|
-| 1 | `lib/supabase/migrations/add_performance_composite_indexes.sql` | 9 composite/partial indexes for jobs list, notifications, scheduler |
+| 1 | `lib/supabase/migrations/add_performance_composite_indexes.sql` | 10 composite/partial indexes for jobs list, notifications, scheduler, address details |
 | 2 | `lib/supabase/migrations/fix_rls_auth_initplan.sql` | `company_memos` RLS: `(select auth.uid())` initplan fix |
 
 ### Off-peak rollout steps
@@ -47,7 +47,7 @@ Migration files (apply manually in Supabase SQL editor — **do not run during b
 4. Run **one** `CREATE INDEX CONCURRENTLY` statement from `add_performance_composite_indexes.sql` at a time (Supabase SQL editor does not wrap in a transaction — paste one statement per execution)
 5. Wait for each build to finish (`SELECT * FROM pg_stat_progress_create_index;`) before starting the next
 6. Pause **5–15 minutes** between batches; monitor CPU, active connections, and API error rate
-7. After all 9 indexes complete, run:
+7. After all 10 indexes complete, run:
 
 ```sql
 ANALYZE jobs;
@@ -55,15 +55,19 @@ ANALYZE notifications;
 ANALYZE technician_jobs;
 ANALYZE job_schedule;
 ANALYZE customer_location;
+ANALYZE customer_address_details;
 ```
 
-8. Run `fix_rls_auth_initplan.sql` in full (policy DDL is lightweight; safe off-peak)
+8. Re-open **Dashboard → Reports → Query Performance** and confirm the top `pgrst` `jobs` window query (scheduled_end) and notifications list drop in share / mean latency.
+
+9. Run `fix_rls_auth_initplan.sql` in full (policy DDL is lightweight; safe off-peak)
 
 Suggested batch groupings (pause between batches):
 
 - **Batch A:** `idx_jobs_active_sched_start_created_at`, `idx_jobs_active_sched_end_start`, `idx_jobs_active_undated_created_at`
 - **Batch B:** `idx_notifications_worker_hidden_created_at`, `idx_notifications_broadcast_hidden_created_at`, `idx_notifications_worker_hidden_read`
 - **Batch C:** `idx_technician_jobs_job_id_active`, `idx_job_schedule_job_id_jsdate`, `idx_customer_location_customer_id_id`
+- **Batch D:** `idx_customer_address_details_customer_location_id` (skip if already created by the FK migration)
 
 ### Post-deploy verification checklist
 
@@ -143,6 +147,33 @@ Review regularly (daily during incidents, weekly in steady state):
 
 ---
 
+## Session clients vs DB pooling (what shares what)
+
+Supabase has three different “client” concepts in this app. Mixing them up leads to wrong expectations about connections and logouts.
+
+| Layer | What it is | Shared across users? |
+|-------|------------|----------------------|
+| **`getSupabaseAdmin()`** (`lib/supabase/server.js`) | Process-singleton **service-role** HTTP client for BFF / `requireSession` / admin DB work | Same Node object in one process; **not** one Postgres connection for everyone — PostgREST still uses Supabase’s pooler |
+| **Per-user portal session** (`uid` + `sessionId` cookies, or mobile Bearer + `X-Uid`) | App single-device gate via `users.current_session_id` (`requireSession`) | **No** — each login gets its own session id; a new login elsewhere invalidates the previous |
+| **Supabase Auth JWT cookies** (browser `AuthContext` / `@supabase/ssr`) | Auth access/refresh tokens for client-side Supabase SDK (Realtime, direct reads) | **No** — each browser has its own JWT |
+
+### Root `proxy.js` + `@supabase/ssr` — JWT refresh, not pooling
+
+Portal UI path in root `proxy.js` builds a **per-request** cookie-aware Supabase client (`createServerClient` with the **anon** key only) and calls `auth.getUser()` so Auth JWT cookies stay valid while the user navigates dashboard pages. (Next.js 16 uses `proxy.js` instead of `middleware.js`.)
+
+That is **session refresh (Auth cookie proxy)**. It does **not**:
+
+- Hold or share one Postgres connection for all users
+- Replace `requireSession` / `current_session_id`
+- Apply to `/api/v1/field/*` or `/api/cron/*` (portal-path gate excludes those)
+- Put the service-role key on the Edge
+
+Field mobile stays on Bearer + `X-Uid` + `getSupabaseAdmin()`; see [`MOBILE_BFF_CONTRACT.md`](./MOBILE_BFF_CONTRACT.md).
+
+Helpers (Pages-friendly, under `lib/supabase/`): `ssrBrowser.js`, `ssrServer.js` — optional gradual use alongside `client.js`. Do not copy App Router `utils/supabase/*` paths blindly.
+
+---
+
 ## Related App-Side Mitigations
 
 These code paths reduce burst load on Supabase (see implementation in repo):
@@ -153,6 +184,34 @@ These code paths reduce burst load on Supabase (see implementation in repo):
 | Dashboard overview | `dashboard_overview_periods_json` RPC + singleflight (`pages/api/dashboard/overview-stats.js`) | Replace 2000-row job scan and 4 count RPCs |
 | Scheduler API | Lower chunk concurrency, longer server cache | Reduce concurrent PostgREST reads |
 | Session validation | In-flight dedupe + 45s TTL cache | One `findByIdForSession` per uid:session per wave |
+| Admin client singleton | One `getSupabaseAdmin()` reused by API / `database.js` (server path) | Less duplicate service-role client objects; still not DB pooling |
+| Portal SSR (`proxy.js`) | `@supabase/ssr` refresh on portal pages only | Fewer Auth JWT expiry surprises on web; not a pooler |
+| Mobile BFF | `/api/v1/field/*` + `api_timing` logs (`X-Client-Source`) | Attribute mobile vs web load without extra DB metrics writes |
+
+---
+
+## Correlating `api_timing` logs with Query Performance
+
+Portal routes instrumented with `withApiMetrics` emit one JSON line per request to stdout (PM2 / host logs), for example:
+
+```json
+{"type":"api_timing","source":"mobile","path":"/api/v1/field/assignments/complete","method":"POST","status":200,"ms":342,"uid":"..."}
+```
+
+| Field | Use |
+|-------|-----|
+| `source` | `mobile` (field app), `web` (portal UI helpers), `system` / `cron`, or `api` if header unknown |
+| `path` / `ms` / `status` | Match slow portal calls to user reports |
+| Timestamp of the log line | Align with Supabase **Query Performance** / API log rows in the same window |
+
+**How to triage a slow mobile call**
+
+1. Grep host logs for `"type":"api_timing"` and `"source":"mobile"` around the incident time.
+2. Note `path` and wall-clock `ms`.
+3. In Supabase Dashboard → Reports → Query Performance (or exported API logs), look for `technician_jobs` / `job_signatures` / `jobs` statements in the same second(s).
+4. Prefer fixing the field BFF path or indexes — do **not** write a metrics row to Supabase per request.
+
+Field contract: [`docs/MOBILE_BFF_CONTRACT.md`](./MOBILE_BFF_CONTRACT.md).
 
 ---
 

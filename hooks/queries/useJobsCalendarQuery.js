@@ -29,6 +29,7 @@ export async function fetchJobsCalendarEvents(range) {
   const response = await fetch(`/api/jobs/calendar-events?${params}`, {
     credentials: 'include',
     cache: 'no-store',
+    headers: { 'X-Client-Source': 'web' },
   });
 
   if (!response.ok) {

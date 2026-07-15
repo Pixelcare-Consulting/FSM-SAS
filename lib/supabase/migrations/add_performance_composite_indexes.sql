@@ -5,7 +5,11 @@
 --   - One CREATE INDEX CONCURRENTLY per statement (not in a transaction block)
 --   - Pause 5–15 minutes between batches; monitor CPU, connections, and API errors
 --   - Wait for each build to finish (pg_stat_progress_create_index) before the next
---   - After all indexes: ANALYZE jobs, notifications, technician_jobs, job_schedule, customer_location
+--   - After all indexes: ANALYZE jobs, notifications, technician_jobs, job_schedule,
+--     customer_location, customer_address_details
+--
+-- Covers advisor hot paths: jobs(scheduled_end), technician_jobs(job_id),
+-- notifications worker/list indexes, and customer_address_details(customer_location_id).
 
 -- 1) Jobs list default browse: filter scheduled_start, sort created_at
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_jobs_active_sched_start_created_at
@@ -48,3 +52,9 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_job_schedule_job_id_jsdate
 -- covering index if planner still seq-scans at scale:
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_customer_location_customer_id_id
   ON public.customer_location (customer_id, id);
+
+-- 7) Address-details lookup by customer_location FK (Supabase advisor)
+-- Same name as add_customer_address_details_customer_location_id.sql; IF NOT EXISTS skips when already present.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_customer_address_details_customer_location_id
+  ON public.customer_address_details (customer_location_id)
+  WHERE customer_location_id IS NOT NULL;

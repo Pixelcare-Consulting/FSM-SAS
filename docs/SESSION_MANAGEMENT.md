@@ -22,11 +22,12 @@ The `ActivityTracker` component automatically:
 - Prevents renewal spam (minimum 2 minutes between renewals)
 - Handles renewal failures gracefully
 
-### 3. Middleware Protection
-The Next.js middleware:
+### 3. Proxy Protection
+The Next.js `proxy.js`:
 - Validates session on each page navigation
 - Redirects to login only when session has truly expired
 - Includes 30-second grace period during renewals to prevent false logouts
+- Refreshes Supabase Auth JWT cookies on portal UI paths (not field BFF / cron)
 
 ## Configuration
 
@@ -48,12 +49,13 @@ MIDDLEWARE_GRACE_PERIOD_MS: 30000     // Grace period for cookie sync (30 sec)
 - Checks every 30 seconds
 - Shows toast notifications on renewal success/failure
 
-### Middleware (`middleware.js`)
-- **Server-side session validator**
+### Proxy (`proxy.js`)
+- **Server-side session validator** (Next.js 16 proxy convention)
 - Checks session on page navigation
 - Allows through even when expired (no forced logout)
 - Only redirects if cookies completely missing (never logged in)
 - Provides grace period for cookie propagation
+- Portal UI: Supabase Auth JWT cookie refresh via `@supabase/ssr`
 
 ### Utilities (`utils/middlewareClient.js`)
 - Helper functions for session management

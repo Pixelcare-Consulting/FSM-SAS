@@ -1,24 +1,42 @@
 import { getSupabaseAdmin } from "../../../lib/supabase/server";
 import { fetchJobCalendarEventsForRange } from "../../../lib/jobs/jobCalendarEvents";
+import {
+  SCHEDULER_MAX_RANGE_DAYS,
+  normalizeSchedulerRange,
+} from "../../../lib/scheduler/schedulerQueries";
 import { getListCache, logResponseSize, setListCache } from "../../../lib/supabase/listQueryHelpers";
+import { withApiMetrics } from "../../../lib/api/withApiMetrics";
 
 const CACHE_TTL_MS = 45000;
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   res.setHeader("Cache-Control", "private, max-age=30");
 
-  const rangeStart = typeof req.query.rangeStart === "string" ? req.query.rangeStart : null;
-  const rangeEnd = typeof req.query.rangeEnd === "string" ? req.query.rangeEnd : null;
+  const rawRangeStart = typeof req.query.rangeStart === "string" ? req.query.rangeStart : null;
+  const rawRangeEnd = typeof req.query.rangeEnd === "string" ? req.query.rangeEnd : null;
 
-  if (!rangeStart || !rangeEnd) {
+  if (!rawRangeStart || !rawRangeEnd) {
     return res.status(400).json({
       error: "rangeStart and rangeEnd are required (ISO date strings)",
     });
   }
+
+  const normalized = normalizeSchedulerRange(
+    rawRangeStart,
+    rawRangeEnd,
+    SCHEDULER_MAX_RANGE_DAYS
+  );
+  if (!normalized) {
+    return res.status(400).json({
+      error: "rangeStart and rangeEnd must be valid ISO dates with rangeEnd >= rangeStart",
+    });
+  }
+
+  const { rangeStart, rangeEnd } = normalized;
 
   const cacheKey = `jobs-calendar:${rangeStart}:${rangeEnd}`;
   const cached = getListCache(cacheKey, CACHE_TTL_MS);
@@ -53,3 +71,5 @@ export default async function handler(req, res) {
     });
   }
 }
+
+export default withApiMetrics(handler);
