@@ -17,6 +17,7 @@ export const releases: ReleaseEntry[] = [
       'improvement: Live job tracking stays in one screen — the job list and crew timeline scroll on their own so the page no longer feels like one long stack.',
       'improvement: Cleaner job cards, a sticky timeline time header, and a tighter map workspace for day-of dispatch.',
       'fix: Pixelcare Assistant is hidden on Live job tracking so it no longer covers the map corner.',
+      'fix: Crew timeline labels no longer overlap — job and assignment status stack cleanly beside each crew’s schedule bars.',
     ],
   },
   {

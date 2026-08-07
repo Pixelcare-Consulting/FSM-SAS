@@ -331,8 +331,11 @@ export default function LiveTrackingAdvancedMarkers({
   const vehicleMarkersRef = useRef(new Map());
   const onStopMarkerClickRef = useRef(onStopMarkerClick);
   const onVehicleClickRef = useRef(onVehicleClick);
-  onStopMarkerClickRef.current = onStopMarkerClick;
-  onVehicleClickRef.current = onVehicleClick;
+
+  useEffect(() => {
+    onStopMarkerClickRef.current = onStopMarkerClick;
+    onVehicleClickRef.current = onVehicleClick;
+  }, [onStopMarkerClick, onVehicleClick]);
 
   useEffect(() => {
     if (!map || typeof window === "undefined") return undefined;

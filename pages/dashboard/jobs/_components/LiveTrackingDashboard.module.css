@@ -13,8 +13,8 @@
   --lt-sidebar-selected: rgba(65, 113, 245, 0.12);
   --lt-timeline-track: #eef2f7;
   --lt-timeline-grid: rgba(15, 23, 42, 0.1);
-  --lt-timeline-band: min(240px, 32vh);
-  --lt-label-col: 200px;
+  --lt-timeline-band: min(280px, 36vh);
+  --lt-label-col: 168px;
 
   display: flex;
   flex-direction: column;
@@ -166,7 +166,11 @@
   min-height: 0;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 0 14px 10px;
+  padding: 0 12px 10px;
+}
+
+.timelineGrid {
+  min-width: 640px;
 }
 
 .timelineHeader {
@@ -174,8 +178,8 @@
   top: 0;
   z-index: 2;
   display: grid;
-  grid-template-columns: var(--lt-label-col) 1fr;
-  gap: 12px;
+  grid-template-columns: var(--lt-label-col) minmax(0, 1fr);
+  gap: 10px;
   align-items: end;
   padding: 8px 0 6px;
   background: var(--lt-surface);
@@ -193,6 +197,7 @@
 .timelineHeaderTrack {
   position: relative;
   height: 18px;
+  min-width: 0;
 }
 
 .timelineHourMark {
@@ -202,14 +207,15 @@
   border-left: 1px dashed var(--lt-timeline-grid);
   font-size: 10px;
   color: var(--lt-muted);
-  padding-left: 4px;
+  padding-left: 3px;
   line-height: 18px;
+  white-space: nowrap;
 }
 
 .crewRow {
   display: grid;
-  grid-template-columns: var(--lt-label-col) 1fr;
-  gap: 12px;
+  grid-template-columns: var(--lt-label-col) minmax(0, 1fr);
+  gap: 10px;
   align-items: center;
   padding: 8px 0;
   border-bottom: 1px solid rgba(226, 232, 240, 0.85);
@@ -219,42 +225,99 @@
   border-bottom: none;
 }
 
+.crewMeta {
+  min-width: 0;
+  overflow: hidden;
+}
+
 .crewName {
   font-weight: 650;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--lt-text);
   line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .crewStatuses {
   display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-  font-size: 11px;
-  line-height: 1.2;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 5px;
   min-width: 0;
-  overflow-x: auto;
+}
+
+.crewStatusRow {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.crewStatusKey {
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--lt-muted);
+  line-height: 1;
+}
+
+.crewStopCount {
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--lt-muted);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .crewTrack {
   position: relative;
-  height: 32px;
+  height: 36px;
   border-radius: 8px;
   background: var(--lt-timeline-track);
   border: 1px solid var(--lt-border);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.crewBar {
+  position: absolute;
+  top: 8px;
+  height: 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  transition: filter 120ms ease;
+}
+
+.crewBar:hover {
+  filter: brightness(1.06);
+}
+
+.crewBarSelected {
+  background: rgba(22, 163, 74, 0.9);
+}
+
+.crewBarDefault {
+  background: rgba(37, 99, 235, 0.85);
 }
 
 .nowLine {
   position: absolute;
-  top: 3px;
-  bottom: 3px;
+  top: 2px;
+  bottom: 2px;
   width: 2px;
   background: #f59e0b;
   border-radius: 1px;
   pointer-events: none;
+  z-index: 1;
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.25);
 }
 
 .emptyList {
@@ -290,6 +353,10 @@
 
   .timelineHeader,
   .crewRow {
-    grid-template-columns: 140px 1fr;
+    grid-template-columns: 132px minmax(0, 1fr);
+  }
+
+  .timelineGrid {
+    min-width: 520px;
   }
 }

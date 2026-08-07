@@ -297,7 +297,7 @@ function getAssignmentStatusPillTheme(raw) {
   return { bg: "#f1f5f9", color: "#475569", border: "#e2e8f0" };
 }
 
-function LiveStatusPill({ raw, kind, compact, statusList = [] }) {
+function LiveStatusPill({ raw, kind, compact, statusList = [], fill = false }) {
   const empty =
     raw == null || String(raw).trim() === "" || String(raw).trim() === "—";
   const label = empty
@@ -325,21 +325,24 @@ function LiveStatusPill({ raw, kind, compact, statusList = [] }) {
       style={{
         display: "inline-flex",
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent: fill ? "flex-start" : "center",
         fontSize: compact ? 10 : 11,
         fontWeight: 600,
         letterSpacing: "0.01em",
-        padding: compact ? "2px 8px" : "4px 11px",
+        padding: compact ? "2px 7px" : "4px 11px",
         borderRadius: 999,
         background: t.bg,
         color: t.color,
         border: `1px solid ${t.border}`,
         lineHeight: 1.25,
-        maxWidth: compact ? 120 : 200,
+        maxWidth: fill ? "100%" : compact ? 120 : 200,
+        width: fill ? "100%" : undefined,
+        minWidth: 0,
         whiteSpace: "nowrap",
         overflow: "hidden",
         textOverflow: "ellipsis",
         boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
+        boxSizing: "border-box",
       }}
     >
       {label}
@@ -1614,10 +1617,11 @@ export default function LiveTrackingDashboard() {
           </span>
         </div>
         <div className={styles.timelineScroll}>
+          <div className={styles.timelineGrid}>
           <div className={styles.timelineHeader}>
             <div className={styles.timelineHeaderLabel}>Crew</div>
             <div className={styles.timelineHeaderTrack}>
-              {[6, 10, 14, 18, 22].map((h) => (
+              {[6, 8, 10, 12, 14, 16, 18, 20, 22].map((h) => (
                 <span
                   key={h}
                   className={styles.timelineHourMark}
@@ -1650,26 +1654,34 @@ export default function LiveTrackingDashboard() {
             );
             return (
               <div key={driver.id} className={styles.crewRow}>
-                <div>
-                  <div className={styles.crewName}>{driver.name}</div>
+                <div className={styles.crewMeta}>
+                  <div className={styles.crewName} title={driver.name}>
+                    {driver.name}
+                  </div>
                   <div className={styles.crewStatuses}>
-                    <span style={{ color: LT.muted, flexShrink: 0 }}>Job</span>
-                    <LiveStatusPill
-                      raw={rowContextStop?.jobStatus}
-                      kind="job"
-                      compact
-                      statusList={jobStatuses}
-                    />
-                    <span style={{ color: LT.border, flexShrink: 0 }} aria-hidden>
-                      ·
-                    </span>
-                    <span style={{ color: LT.muted, flexShrink: 0 }}>Assign</span>
-                    <LiveStatusPill
-                      raw={rowContextStop?.assignmentStatus}
-                      kind="assignment"
-                      compact
-                      statusList={jobStatuses}
-                    />
+                    <div className={styles.crewStatusRow}>
+                      <span className={styles.crewStatusKey}>Job</span>
+                      <LiveStatusPill
+                        raw={rowContextStop?.jobStatus}
+                        kind="job"
+                        compact
+                        fill
+                        statusList={jobStatuses}
+                      />
+                    </div>
+                    <div className={styles.crewStatusRow}>
+                      <span className={styles.crewStatusKey}>Asg</span>
+                      <LiveStatusPill
+                        raw={rowContextStop?.assignmentStatus}
+                        kind="assignment"
+                        compact
+                        fill
+                        statusList={jobStatuses}
+                      />
+                    </div>
+                  </div>
+                  <div className={styles.crewStopCount}>
+                    {rowStops.length} stop{rowStops.length === 1 ? "" : "s"}
                   </div>
                 </div>
                 <div className={styles.crewTrack}>
@@ -1681,27 +1693,30 @@ export default function LiveTrackingDashboard() {
                       3,
                       ((end - start) / TIMELINE_MINUTES) * 100
                     );
+                    const selected = s.id === selectedStopId;
                     return (
                       <div
                         key={s.id}
+                        role="button"
+                        tabIndex={0}
                         title={`${s.jobRef} ${s.windowStart}-${s.windowEnd}`}
+                        className={`${styles.crewBar} ${
+                          selected ? styles.crewBarSelected : styles.crewBarDefault
+                        }`}
                         onClick={() => {
                           setSelectedStopId(s.id);
                           focusMapOnStop(s);
                         }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setSelectedStopId(s.id);
+                            focusMapOnStop(s);
+                          }
+                        }}
                         style={{
-                          position: "absolute",
                           left: `${left}%`,
                           width: `${width}%`,
-                          top: 7,
-                          height: 18,
-                          borderRadius: 6,
-                          background:
-                            s.id === selectedStopId
-                              ? "rgba(22,163,74,0.85)"
-                              : "rgba(37,99,235,0.8)",
-                          cursor: "pointer",
-                          border: "1px solid rgba(15,23,42,0.15)",
                         }}
                       />
                     );
@@ -1714,6 +1729,7 @@ export default function LiveTrackingDashboard() {
               </div>
             );
           })}
+          </div>
         </div>
       </div>
 
