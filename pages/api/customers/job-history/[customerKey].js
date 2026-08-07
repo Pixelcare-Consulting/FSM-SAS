@@ -44,12 +44,14 @@ export default async function handler(req, res) {
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(Math.max(1, Number(req.query.limit) || 20), 200);
   const search = String(req.query.search || '').trim();
+  const dateFrom = String(req.query.dateFrom || '').trim();
+  const dateTo = String(req.query.dateTo || '').trim();
 
   if (!customerKey) {
     return res.status(400).json({ error: 'Customer id is required' });
   }
 
-  const cacheKey = `customer-job-history:${customerKey}:${page}:${limit}:${search}`;
+  const cacheKey = `customer-job-history:${customerKey}:${page}:${limit}:${search}:${dateFrom}:${dateTo}`;
   const cached = getListCache(cacheKey, CACHE_TTL_MS);
   if (cached) {
     logResponseSize('customers/job-history/[customerKey] (cached)', cached);
@@ -71,6 +73,8 @@ export default async function handler(req, res) {
       page,
       limit,
       search,
+      dateFrom,
+      dateTo,
     });
 
     setListCache(cacheKey, payload, CACHE_TTL_MS);

@@ -10,6 +10,14 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.16.5',
+    date: '2026-08-07',
+    title: 'Job History date range filter',
+    notes: [
+      'feature: Customer Job History can filter by From and To date so you can find jobs in a specific period without scrolling the full list.',
+    ],
+  },
+  {
     version: '3.16.4',
     date: '2026-08-07',
     title: 'Archive audit log history',

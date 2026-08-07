@@ -19,7 +19,7 @@ import {
   getJobStatusColorFromList,
   getJobStatusLabelFromList,
 } from "../../utils/jobStatusDefaults";
-import { Search, XCircle } from 'react-bootstrap-icons';
+import { Search, XCircle, Calendar } from 'react-bootstrap-icons';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { toast } from 'react-toastify';
@@ -59,6 +59,8 @@ export const HistoryTab = ({ customerID, hasVisited = true }) => {
   const [jobHistory, setJobHistory] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [jobsPerPage, setJobsPerPage] = useState(25);
   const router = useRouter();
@@ -71,8 +73,10 @@ export const HistoryTab = ({ customerID, hasVisited = true }) => {
       page: currentPage,
       limit: jobsPerPage,
       search: debouncedSearch,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
     }),
-    [currentPage, jobsPerPage, debouncedSearch]
+    [currentPage, jobsPerPage, debouncedSearch, dateFrom, dateTo]
   );
 
   const {
@@ -90,7 +94,7 @@ export const HistoryTab = ({ customerID, hasVisited = true }) => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, customerID, jobsPerPage]);
+  }, [debouncedSearch, dateFrom, dateTo, customerID, jobsPerPage]);
 
   useEffect(() => {
     if (historyError) {
@@ -268,15 +272,15 @@ export const HistoryTab = ({ customerID, hasVisited = true }) => {
         </Col>
       </Row>
 
-      {/* Search bar and per-page dropdown */}
-      <Row className="mb-3">
-        <Col md={6}>
+      {/* Search, date range, and per-page */}
+      <Row className="mb-3 g-2 align-items-end">
+        <Col xs={12} lg={5}>
           <InputGroup>
             <InputGroup.Text>
               <Search />
             </InputGroup.Text>
             <Form.Control
-              placeholder="Search by keyword (multiple words narrow results): job no, date, location, description, technician, status…"
+              placeholder="Search by keyword (multiple words narrow results): job no, location, description, technician, status…"
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
@@ -296,7 +300,56 @@ export const HistoryTab = ({ customerID, hasVisited = true }) => {
             )}
           </InputGroup>
         </Col>
-        <Col md={3} className="d-flex align-items-center justify-content-end ms-auto">
+        <Col xs={12} lg={5}>
+          <Form.Label className="small text-muted mb-1 d-block">Filter by date range</Form.Label>
+          <div className="d-flex flex-wrap align-items-center gap-2">
+            <InputGroup size="sm" style={{ width: 'auto', minWidth: '9.5rem', maxWidth: '11rem' }}>
+              <InputGroup.Text className="px-2">
+                <Calendar />
+              </InputGroup.Text>
+              <Form.Control
+                type="date"
+                value={dateFrom}
+                max={dateTo || undefined}
+                onChange={(e) => {
+                  setDateFrom(e.target.value);
+                  setCurrentPage(1);
+                }}
+                aria-label="From date"
+              />
+            </InputGroup>
+            <span className="text-muted small px-1">to</span>
+            <InputGroup size="sm" style={{ width: 'auto', minWidth: '9.5rem', maxWidth: '11rem' }}>
+              <InputGroup.Text className="px-2">
+                <Calendar />
+              </InputGroup.Text>
+              <Form.Control
+                type="date"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={(e) => {
+                  setDateTo(e.target.value);
+                  setCurrentPage(1);
+                }}
+                aria-label="To date"
+              />
+            </InputGroup>
+            {(dateFrom || dateTo) && (
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => {
+                  setDateFrom('');
+                  setDateTo('');
+                  setCurrentPage(1);
+                }}
+              >
+                Clear dates
+              </Button>
+            )}
+          </div>
+        </Col>
+        <Col xs={12} lg={2} className="d-flex align-items-center justify-content-lg-end">
           <Form.Group className="d-flex align-items-center mb-0">
             <Form.Label className="mb-0 me-2 text-nowrap">Per page:</Form.Label>
             <Form.Select

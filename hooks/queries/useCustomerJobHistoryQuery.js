@@ -13,6 +13,12 @@ async function fetchCustomerJobHistory(customerId, params) {
   if (params.search) {
     searchParams.set('search', params.search);
   }
+  if (params.dateFrom) {
+    searchParams.set('dateFrom', params.dateFrom);
+  }
+  if (params.dateTo) {
+    searchParams.set('dateTo', params.dateTo);
+  }
 
   const response = await fetch(
     `/api/customers/job-history/${encodeURIComponent(customerId)}?${searchParams.toString()}`,
