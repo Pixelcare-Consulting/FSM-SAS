@@ -9,14 +9,12 @@ import {
 	Container,
 	Nav,
 	Navbar,
-	Form,
 	Image
 } from 'react-bootstrap';
 // Firebase removed - using Supabase instead
 
 // import sub components
 import NavDropdownMain from './navbars/NavDropdownMain';
-import DocumentMenu from './navbars/DocumentMenu';
 
 // import sub components
 import QuickMenu from 'layouts/QuickMenu';
@@ -27,7 +25,6 @@ import CompanyMemosSignInModal from './_components/CompanyMemosSignInModal';
 import NavbarTopRoutes from 'routes/dashboard/NavbarTopRoutes';
 
 // import utility function
-import { getCompanyDetails } from '../../utils/companyCache';
 import { useLogo } from '../../contexts/LogoContext';
 import { useDashboardBootstrap } from '../../hooks/useDashboardBootstrap';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -41,6 +38,7 @@ const DashboardIndexTop = (props) => {
 	const isAdminNav = user?.role === 'ADMIN';
 	const [expandedMenu, setExpandedMenu] = useState(false);
 	useDashboardBootstrap();
+	const navRoutes = NavbarTopRoutes;
 
 	return (
 		<div>
@@ -96,7 +94,7 @@ const DashboardIndexTop = (props) => {
 					<Navbar.Collapse id="navbarScroll">
 						<Nav className="navbar-nav dashboard-top-menu-nav flex-row flex-nowrap align-items-center w-100">
 							<div className="d-flex flex-row flex-nowrap align-items-center">
-								{NavbarTopRoutes.filter(
+								{navRoutes.filter(
 									(item) =>
 										!item.alignEnd && (!item.adminOnly || isAdminNav)
 								).map((item, index) => (
@@ -108,7 +106,7 @@ const DashboardIndexTop = (props) => {
 								))}
 							</div>
 							<div className="d-flex flex-row flex-nowrap align-items-center ms-auto">
-								{NavbarTopRoutes.filter(
+								{navRoutes.filter(
 									(item) =>
 										item.alignEnd && (!item.adminOnly || isAdminNav)
 								).map((item, index) => (

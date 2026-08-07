@@ -1,5 +1,5 @@
 import { useRouter } from "next/router";
-import { useEffect, useState, Fragment, useRef, useCallback, useMemo } from "react";
+import { useEffect, useState, Fragment, useRef, useCallback, useMemo, useSyncExternalStore } from "react";
 import { useQueryClient } from "react-query";
 import { getSupabaseClient } from "../../../../lib/supabase/client";
 import { pickMasterlistContactRow } from "../../../../lib/jobs/pickMasterlistSiteContact";
@@ -136,11 +136,19 @@ import format from "date-fns/format";
 import { getDefaultJobStatuses, getJobStatusColorFromList, getJobStatusLabelFromList } from '../../../../utils/jobStatusSettings';
 import { useJobDetailQuery } from '../../../../hooks/queries/useJobDetailQuery';
 import { useJobChatQuery } from '../../../../hooks/queries/useJobChatQuery';
+import {
+  markJobMessagesReadRequest,
+  useJobMessagesUnreadCountQuery,
+} from '../../../../hooks/queries/useJobMessagesListQuery';
 import { useJobSignaturesQuery } from '../../../../hooks/queries/useJobSignaturesQuery';
 import { useJobMediaQuery } from '../../../../hooks/queries/useJobMediaQuery';
 import { useCustomerAddressQuery } from '../../../../hooks/queries/useCustomerAddressQuery';
 import { useJobStatusesQuery } from '../../../../hooks/queries/useJobStatusesQuery';
 import { useFollowUpTypesQuery } from '../../../../hooks/queries/useFollowUpTypesQuery';
+import useSyncNonEmptyArray from '../../../../hooks/useSyncNonEmptyArray';
+import useSyncCachedQueryState from '../../../../hooks/useSyncCachedQueryState';
+import useSyncCustomerAddressDetails from '../../../../hooks/useSyncCustomerAddressDetails';
+import useToastOnQueryError from '../../../../hooks/useToastOnQueryError';
 import { invalidateJobDetailSatellites } from '../../../../lib/jobs/jobDetailSatelliteInvalidation';
 import {
   invalidateJobCachesAfterMutation,
@@ -159,6 +167,8 @@ import {
 } from '../../../../lib/followUps/followUpListSummary';
 import { QRCodeSVG } from 'qrcode.react';
 
+const getChatQueryErrorMessage = (error) =>
+  `Failed to load messages: ${error.message}`;
 
 // Helper function to fetch worker details from Supabase
 const fetchWorkerDetails = async (workerIds) => {
@@ -327,6 +337,67 @@ const mergeJobHeaderFromRow = (prevJob, row) => {
     created_by_user: prevJob.created_by_user,
   };
 };
+
+const CSO_CLOCK_TICK_MS = 60_000;
+let csoClockNowMs = 0;
+let csoClockTimer = null;
+const csoClockListeners = new Set();
+
+function subscribeCsoClock(onStoreChange) {
+  csoClockListeners.add(onStoreChange);
+  if (csoClockListeners.size === 1) {
+    csoClockNowMs = Date.now();
+    csoClockTimer = setInterval(() => {
+      csoClockNowMs = Date.now();
+      csoClockListeners.forEach((listener) => listener());
+    }, CSO_CLOCK_TICK_MS);
+  }
+  return () => {
+    csoClockListeners.delete(onStoreChange);
+    if (csoClockListeners.size === 0 && csoClockTimer != null) {
+      clearInterval(csoClockTimer);
+      csoClockTimer = null;
+    }
+  };
+}
+
+function getCsoClockSnapshot() {
+  return csoClockNowMs;
+}
+
+function getCsoClockServerSnapshot() {
+  return 0;
+}
+
+/** CSO alert: scheduled window ended but assignment still active. Clock via external store (render purity). */
+function CsoScheduledWindowAlert({ jobStatus, scheduledEnd, assignedWorkers }) {
+  const nowMs = useSyncExternalStore(
+    subscribeCsoClock,
+    getCsoClockSnapshot,
+    getCsoClockServerSnapshot
+  );
+
+  if (!nowMs) return null;
+
+  const jobDone = ["COMPLETED", "CANCELLED"].includes(
+    String(jobStatus || "").toUpperCase()
+  );
+  const schedEnd = scheduledEnd ? new Date(scheduledEnd) : null;
+  const pastWindow = schedEnd && schedEnd.getTime() < nowMs;
+  const anyActive = (assignedWorkers || []).some((t) => {
+    const s = String(t.assignment_status || "").toUpperCase();
+    return s === "STARTED" || s === "IN_PROGRESS";
+  });
+
+  if (!(pastWindow && !jobDone && anyActive)) return null;
+
+  return (
+    <Alert variant="warning" className="py-2 small mb-3">
+      <strong>Scheduled window has ended</strong> — assignment is still active in the
+      field. Confirm status with the technician or update the job.
+    </Alert>
+  );
+}
 
 const getCsoGpsSummary = (techLocationData) => {
   if (!techLocationData?.tracked_at) {
@@ -604,7 +675,9 @@ const JobDetails = () => {
   const router = useRouter();
   const { user: bootstrapUser } = useCurrentUser();
   const bootstrapUserRef = useRef(bootstrapUser);
-  bootstrapUserRef.current = bootstrapUser;
+  useEffect(() => {
+    bootstrapUserRef.current = bootstrapUser;
+  }, [bootstrapUser]);
 
   const getCurrentUserInfo = useCallback(async () => {
     return resolveCurrentUserInfo(bootstrapUserRef.current);
@@ -641,7 +714,7 @@ const JobDetails = () => {
   const [technicianNotes, setTechnicianNotes] = useState([]);
   const [newTechnicianNote, setNewTechnicianNote] = useState("");
   const [editingNote, setEditingNote] = useState(null);
-  const [userEmail, setUserEmail] = useState("");
+  const userEmail = Cookies.get("email") || "Unknown";
   const [workerComments, setWorkerComments] = useState([]);
   const [newComment, setNewComment] = useState("");
   const [images, setImages] = useState([]);
@@ -859,57 +932,45 @@ const JobDetails = () => {
   } = useJobChatQuery(jobUuid, {
     enabled: Boolean(jobUuid),
   });
+  const {
+    data: jobUnreadPayload,
+    refetch: refetchJobUnreadCount,
+  } = useJobMessagesUnreadCountQuery(
+    { jobId: jobUuid },
+    { enabled: Boolean(jobUuid) }
+  );
+  const jobUnreadCount = jobUnreadPayload?.unreadCount ?? 0;
 
-  useEffect(() => {
-    if (!job?.customerCode) {
-      setAddressDetailsMap({});
-      setAddressDetailsByLocationId({});
-      return;
-    }
-    if (addressDetailsPayload) {
-      setAddressDetailsMap(addressDetailsPayload.data || {});
-      setAddressDetailsByLocationId(addressDetailsPayload.dataByCustomerLocationId || {});
-    }
-  }, [job?.customerCode, addressDetailsPayload]);
-
-  useEffect(() => {
-    if (Array.isArray(followUpTypesData) && followUpTypesData.length > 0) {
-      setFollowUpTypes(followUpTypesData);
-    }
-  }, [followUpTypesData]);
-
-  useEffect(() => {
-    if (Array.isArray(jobStatusesData) && jobStatusesData.length > 0) {
-      setJobStatuses(jobStatusesData);
-    }
-  }, [jobStatusesData]);
-
-  useEffect(() => {
-    if (cachedJobImages) {
-      setJobImages(cachedJobImages);
-    }
-    setIsLoadingImages(isJobMediaLoading && !cachedJobImages);
-  }, [cachedJobImages, isJobMediaLoading]);
-
-  useEffect(() => {
-    if (cachedSignatures) {
-      setSignatures(cachedSignatures);
-    }
-    setIsLoadingSignatures(isSignaturesQueryLoading && cachedSignatures == null);
-  }, [cachedSignatures, isSignaturesQueryLoading]);
-
-  useEffect(() => {
-    if (cachedChatMessages) {
-      setChatMessages(cachedChatMessages);
-    }
-    setIsLoadingChat(isChatQueryLoading && !cachedChatMessages);
-  }, [cachedChatMessages, isChatQueryLoading]);
-
-  useEffect(() => {
-    if (chatQueryError) {
-      toast.error(`Failed to load messages: ${chatQueryError.message}`);
-    }
-  }, [chatQueryError]);
+  useSyncCustomerAddressDetails({
+    customerCode: job?.customerCode,
+    payload: addressDetailsPayload,
+    setByCode: setAddressDetailsMap,
+    setByLocationId: setAddressDetailsByLocationId,
+  });
+  useSyncNonEmptyArray(followUpTypesData, setFollowUpTypes);
+  useSyncNonEmptyArray(jobStatusesData, setJobStatuses);
+  useSyncCachedQueryState({
+    data: cachedJobImages,
+    isLoading: isJobMediaLoading,
+    setData: setJobImages,
+    setIsLoading: setIsLoadingImages,
+    missing: 'falsy',
+  });
+  useSyncCachedQueryState({
+    data: cachedSignatures,
+    isLoading: isSignaturesQueryLoading,
+    setData: setSignatures,
+    setIsLoading: setIsLoadingSignatures,
+    missing: 'nullish',
+  });
+  useSyncCachedQueryState({
+    data: cachedChatMessages,
+    isLoading: isChatQueryLoading,
+    setData: setChatMessages,
+    setIsLoading: setIsLoadingChat,
+    missing: 'falsy',
+  });
+  useToastOnQueryError(chatQueryError, getChatQueryErrorMessage);
 
   // Helper function to format date as DD/MM/YYYY
   const formatDateDDMMYYYY = (timestamp) => {
@@ -964,32 +1025,39 @@ const JobDetails = () => {
   // Define constants (shared list — Open only once; Completed included; OPEN aliased on edit)
   const FOLLOW_UP_STATUSES = DEFAULT_FOLLOW_UP_STATUS_OPTIONS;
 
-  useEffect(() => {
-    // Retrieve email from cookies
-    const emailFromCookie = Cookies.get("email");
-    setUserEmail(emailFromCookie || "Unknown");
-  }, []);
+  // Reset job-scoped UI state during render when the route id is invalid or the
+  // detail query settled without a job (avoids cascading setState-in-effect).
+  const shouldResetJobLocalState =
+    router.isReady &&
+    ((!jobId || typeof jobId !== 'string') ||
+      (!jobDetailQueryLoading && (jobDetailQueryError || !jobDetailBundle?.job)));
+  if (shouldResetJobLocalState) {
+    if (job !== null) setJob(null);
+    if (jobUuid !== null) setJobUuid(null);
+    if (location !== null) setLocation(null);
+    if (jobAttendance.length > 0) setJobAttendance([]);
+  }
+
+  // When Maps is ready and the job already has coordinates, sync the pin during
+  // render instead of in an effect.
+  if (
+    !shouldResetJobLocalState &&
+    isLoaded &&
+    !loadError &&
+    job?.id &&
+    location == null
+  ) {
+    const fromJob = getLatLngFromLocationRecord(job.location);
+    if (fromJob) {
+      setLocation(fromJob);
+    }
+  }
 
   useEffect(() => {
     if (!router.isReady) return;
-
-    if (!jobId || typeof jobId !== 'string') {
-      setJob(null);
-      setJobUuid(null);
-      setLocation(null);
-      setJobAttendance([]);
-      return;
-    }
-
+    if (!jobId || typeof jobId !== 'string') return;
     if (jobDetailQueryLoading) return;
-
-    if (jobDetailQueryError || !jobDetailBundle?.job) {
-      setJob(null);
-      setJobUuid(null);
-      setLocation(null);
-      setJobAttendance([]);
-      return;
-    }
+    if (jobDetailQueryError || !jobDetailBundle?.job) return;
 
     let cancelled = false;
 
@@ -1143,7 +1211,7 @@ const JobDetails = () => {
     resolvePaymentQrRefNumber,
   ]);
 
-  const handleMarkJobPaid = useCallback(async () => {
+  const handleMarkJobPaid = async () => {
     const jobIdForUpdate = jobUuid || job?.id;
     if (!jobIdForUpdate) return;
 
@@ -1187,18 +1255,14 @@ const JobDetails = () => {
     } finally {
       setMarkPaidLoading(false);
     }
-  }, [jobUuid, job?.id, job?.payment_qr_amount, paymentDetails.amount, markPaidBankRef]);
+  };
 
   // If job data loaded before Google Maps script, or REST geocode failed, resolve pin when Maps is ready.
+  // Coordinate sync from job.location happens during render; this effect only geocodes asynchronously.
   useEffect(() => {
     if (!isLoaded || loadError || !job?.id) return;
     if (location) return;
-
-    const fromJob = getLatLngFromLocationRecord(job.location);
-    if (fromJob) {
-      setLocation(fromJob);
-      return;
-    }
+    if (getLatLngFromLocationRecord(job.location)) return;
 
     const query = buildGeocodableAddressForJob(job);
     if (!query) return;
@@ -1297,6 +1361,17 @@ const JobDetails = () => {
       chatMessagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [chatMessages, isChatOpen, isChatMinimized]);
+
+  // Keep thread marked read while the chat popup is open (covers realtime arrivals).
+  useEffect(() => {
+    if (!isChatOpen || isChatMinimized || !jobUuid) return;
+    if (!chatMessages.length) return;
+    void markJobMessagesReadRequest({ jobId: jobUuid })
+      .then(() => {
+        void refetchJobUnreadCount();
+      })
+      .catch(() => {});
+  }, [isChatOpen, isChatMinimized, jobUuid, chatMessages.length, refetchJobUnreadCount]);
 
   // Resolve current user for admin messages (bootstrap — no extra getUserInfo poll)
   useEffect(() => {
@@ -2584,6 +2659,20 @@ const JobDetails = () => {
     }
   };
 
+  const openJobChat = useCallback(() => {
+    setIsChatOpen(true);
+    setIsChatMinimized(false);
+    if (!jobUuid) return;
+    void markJobMessagesReadRequest({ jobId: jobUuid })
+      .then(() => {
+        void refetchJobUnreadCount();
+        void queryClient.invalidateQueries(['jobs', 'messages']);
+      })
+      .catch((err) => {
+        console.warn('mark job thread read failed', err?.message);
+      });
+  }, [jobUuid, queryClient, refetchJobUnreadCount]);
+
   // Render floating chat button (only show when chat is closed)
   const renderFloatingChatButton = () => {
     if (isChatOpen) return null;
@@ -2591,16 +2680,15 @@ const JobDetails = () => {
     return (
       <button
         className={styles.floatingChatButton}
-        onClick={() => {
-          setIsChatOpen(true);
-          setIsChatMinimized(false);
-        }}
+        onClick={openJobChat}
         title="Open Job Messages"
       >
         <img src="/chat.png" alt="Chat" className={styles.floatingChatButtonIcon} />
-        {chatMessages.length > 0 && (
-          <span className={styles.chatBadge}>{chatMessages.length}</span>
-        )}
+        {jobUnreadCount > 0 ? (
+          <span className={styles.chatBadge}>
+            {jobUnreadCount > 99 ? '99+' : jobUnreadCount}
+          </span>
+        ) : null}
       </button>
     );
   };
@@ -2617,6 +2705,11 @@ const JobDetails = () => {
             {chatMessages.length > 0 && (
               <span className={styles.chatCountBadge}>{chatMessages.length}</span>
             )}
+            {jobUnreadCount > 0 ? (
+              <span className={styles.chatCountBadge} title="Unread for you">
+                {jobUnreadCount} unread
+              </span>
+            ) : null}
           </div>
           <div className={styles.chatPopupActions}>
             <button
@@ -6686,28 +6779,11 @@ const JobDetails = () => {
                     <p className={styles.csoMonitorHint}>
                       Coordinator snapshot: assignment window, GPS, attendance, checklist progress, field notes, and quick links.
                     </p>
-                    {(() => {
-                      const jobDone = ["COMPLETED", "CANCELLED"].includes(
-                        String(job.jobStatus || "").toUpperCase()
-                      );
-                      const schedEnd = job.scheduled_end
-                        ? new Date(job.scheduled_end)
-                        : null;
-                      const pastWindow = schedEnd && schedEnd.getTime() < Date.now();
-                      const anyActive = job.assignedWorkers.some((t) => {
-                        const s = String(t.assignment_status || "").toUpperCase();
-                        return s === "STARTED" || s === "IN_PROGRESS";
-                      });
-                      if (pastWindow && !jobDone && anyActive) {
-                        return (
-                          <Alert variant="warning" className="py-2 small mb-3">
-                            <strong>Scheduled window has ended</strong> — assignment is still active in the
-                            field. Confirm status with the technician or update the job.
-                          </Alert>
-                        );
-                      }
-                      return null;
-                    })()}
+                    <CsoScheduledWindowAlert
+                      jobStatus={job.jobStatus}
+                      scheduledEnd={job.scheduled_end}
+                      assignedWorkers={job.assignedWorkers}
+                    />
                     <Row className="g-3">
                       {job.assignedWorkers.map((technician, index) => {
                         const techName =

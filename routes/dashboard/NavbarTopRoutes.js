@@ -98,12 +98,6 @@ const NavbarDefault = [
 				icon: 'GeoAlt',
 				badge: 'NEW'
 			},
-			{
-				id: uuid(),
-				menuitem: 'Job Messages',
-				link: '/jobs/messages',
-				icon: 'ChatDots',
-			},
 			// {
 			// 	id: uuid(),
 			// 	menuitem: 'Jobs Calendar',

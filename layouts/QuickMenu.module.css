@@ -558,7 +558,8 @@
   align-items: center;
 }
 
-.qmNotifToggle {
+.qmNotifToggle,
+.qmIconToggle {
   position: relative !important;
   width: 40px !important;
   height: 40px !important;
@@ -571,16 +572,25 @@
   border: none !important;
   box-shadow: none !important;
   color: #1c1e21 !important;
-  transition: background-color 0.15s ease, filter 0.15s ease;
+  transition: background-color 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
   overflow: visible !important;
+  text-decoration: none !important;
 }
 
 .qmNotifToggle:hover,
 .qmNotifToggle:focus,
 .qmNotifToggle:active,
-.qmNotifToggle.show {
+.qmNotifToggle.show,
+.qmIconToggle:hover,
+.qmIconToggle:focus {
   background: #e4e6eb !important;
   color: #1c1e21 !important;
+}
+
+.qmIconToggleActive {
+  background: #e8eefc !important;
+  color: #4171f5 !important;
+  box-shadow: inset 0 0 0 2px rgba(65, 113, 245, 0.45);
 }
 
 .qmNotifToggle::after {

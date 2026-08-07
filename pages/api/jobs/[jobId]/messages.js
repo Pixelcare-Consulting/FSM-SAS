@@ -6,6 +6,8 @@ import {
   AUDIT_CATEGORIES,
   AUDIT_STATUS,
 } from '../../../../lib/services/auditLog';
+import { markJobMessagesRead } from '../../../../lib/jobs/jobMessageReads';
+import { invalidateListCache } from '../../../../lib/supabase/listQueryHelpers';
 
 const MESSAGE_SELECT =
   'id, job_id, technician_job_id, sender_type, message, image_url, admin_id, created_at, updated_at, deleted_at, deleted_by_user_ids';
@@ -180,6 +182,16 @@ export default async function handler(req, res) {
     }
 
     let data = inserted;
+
+    // Sender's own message should never appear unread for them.
+    if (data?.id && resolvedSenderType === 'ADMIN' && adminUserId) {
+      try {
+        await markJobMessagesRead(supabase, adminUserId, [data.id]);
+        invalidateListCache('job-messages-');
+      } catch (readErr) {
+        console.warn('Messages API: mark own message read failed', readErr?.message);
+      }
+    }
 
     void writeAuditLogFromRequest(req, {
       action: AUDIT_ACTIONS.JOB_MESSAGE_CREATE,

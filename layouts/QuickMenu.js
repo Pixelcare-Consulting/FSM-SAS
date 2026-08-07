@@ -5,7 +5,7 @@ import { useMediaQuery } from "react-responsive";
 import { ListGroup, Dropdown, Badge, Button, InputGroup, Form } from "react-bootstrap";
 import Image from "next/image";
 import SimpleBar from "simplebar-react";
-import { FaBell, FaSearch, FaTimes } from "react-icons/fa";
+import { FaBell, FaComments, FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { globalQuickSearch } from '../utils/searchUtils';
@@ -15,6 +15,7 @@ import Cookies from "js-cookie";
 import { useQueryClient } from 'react-query';
 import { getSupabaseClient } from "../lib/supabase/client";
 import { useNotificationsQuery } from '../hooks/queries/useNotificationsQuery';
+import { useJobMessagesUnreadCountQuery } from '../hooks/queries/useJobMessagesListQuery';
 import { useDashboardBootstrap } from '../hooks/useDashboardBootstrap';
 import { useCurrentUserProfile } from '@/hooks/useCurrentUser';
 import { readCachedDashboardBootstrap, invalidateDashboardBootstrapCache } from '../utils/dashboardBootstrapCache';
@@ -366,6 +367,16 @@ const QuickMenu = ({ children }) => {
 
   const { data: bootstrap } = useDashboardBootstrap();
   const { profile: userDetails, user: currentUser } = useCurrentUserProfile();
+  const { data: jobMessagesUnreadPayload } = useJobMessagesUnreadCountQuery(
+    {},
+    { enabled: Boolean(currentUser?.id) }
+  );
+  const jobMessagesUnreadCount = jobMessagesUnreadPayload?.unreadCount ?? 0;
+  const isJobMessagesActive =
+    router.pathname === '/jobs/messages' ||
+    router.pathname === '/dashboard/jobs/messages' ||
+    router.asPath?.startsWith('/jobs/messages') ||
+    router.asPath?.startsWith('/dashboard/jobs/messages');
 
   useEffect(() => {
     const email = sanitizeNameValue(Cookies.get("email")) || sanitizeNameValue(Cookies.get("username"));
@@ -1260,6 +1271,29 @@ const QuickMenu = ({ children }) => {
               ) : null}
             </Dropdown.Menu>
           </Dropdown>
+        </li>
+
+        {/* Job Messages */}
+        <li className={`nav-item me-2 align-self-center ${styles.qmNotifLi}`}>
+          <Link
+            href="/jobs/messages"
+            className={`${styles.qmIconToggle}${
+              isJobMessagesActive ? ` ${styles.qmIconToggleActive}` : ''
+            }`}
+            aria-label="Job Messages"
+            title="Job Messages"
+          >
+            <FaComments className={styles.qmNotifBellIcon} aria-hidden />
+            {jobMessagesUnreadCount > 0 ? (
+              <span
+                className={`${styles.qmNotifBadge}${
+                  jobMessagesUnreadCount > 9 ? ` ${styles.qmNotifBadgeWide}` : ''
+                }`}
+              >
+                {jobMessagesUnreadCount > 99 ? '99+' : jobMessagesUnreadCount}
+              </span>
+            ) : null}
+          </Link>
         </li>
 
         {/* User Dropdown */}

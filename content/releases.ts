@@ -10,6 +10,29 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.19.0',
+    date: '2026-08-07',
+    title: 'Job Messages in the top bar',
+    notes: [
+      'feature: Job Messages is now a shortcut in the top bar next to notifications, with an unread badge so you can jump in quickly.',
+      'improvement: The inbox lists one conversation per job (no duplicate job numbers) and opening it shows the full chat with a reply box.',
+      'improvement: Each chat message shows Sent, Read (with time), or Unread so you can tell what’s new.',
+      'improvement: Choose how many conversations to show per page (10–100), with the list and chat headers staying fixed while you scroll.',
+      'improvement: The Job Messages page uses the same blue page header as other screens and spans the full width for easier reading.',
+      'improvement: Job Messages no longer appears under the Jobs menu; use the top-bar chat icon instead.',
+    ],
+  },
+  {
+    version: '3.18.0',
+    date: '2026-08-07',
+    title: 'Job Messages unread inbox',
+    notes: [
+      'feature: Job Messages now tracks read and unread per person — new replies stay highlighted until you open them.',
+      'feature: The Job Messages page looks like an inbox, with folders for Unread, admins, and technicians, plus a message preview.',
+      'improvement: Unread counts show in the Jobs menu and on the job chat button so you can see what needs attention.',
+    ],
+  },
+  {
     version: '3.17.0',
     date: '2026-08-07',
     title: 'Job Messages history',

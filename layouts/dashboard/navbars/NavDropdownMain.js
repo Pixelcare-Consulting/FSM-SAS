@@ -25,12 +25,12 @@ const NavDropdownMain = (props) => {
 		);
 	};
 
-	const renderBadge = (badge, dropdownRow = false) => {
+	const renderBadge = (badge, dropdownRow = false, badgecolor) => {
 		if (!badge) return null;
 		return (
 			<Badge
 				pill
-				bg="primary"
+				bg={badgecolor || 'primary'}
 				className={
 					dropdownRow
 						? 'flex-shrink-0 text-uppercase'
@@ -62,7 +62,7 @@ const NavDropdownMain = (props) => {
 			<span className="d-flex align-items-center flex-nowrap gap-2">
 				{renderIcon(menuItem.icon, true)}
 				<span className="text-nowrap">{menuItem.menuitem}</span>
-				{menuItem.badge ? renderBadge(menuItem.badge, true) : null}
+				{menuItem.badge ? renderBadge(menuItem.badge, true, menuItem.badgecolor) : null}
 			</span>
 		</NavDropdown.Item>
 	);
@@ -81,7 +81,7 @@ const NavDropdownMain = (props) => {
 		>
 			{renderIcon(item.icon)}
 			<span>{item.menuitem}</span>
-			{item.badge && renderBadge(item.badge)}
+			{item.badge && renderBadge(item.badge, false, item.badgecolor)}
 		</Link>
 	);
 
@@ -95,7 +95,7 @@ const NavDropdownMain = (props) => {
 					}}>
 						{renderIcon(item.icon)}
 						{item.menuitem} 
-						{item.badge && renderBadge(item.badge)}
+						{item.badge && renderBadge(item.badge, false, item.badgecolor)}
 						<FaChevronDown className="ms-2 text-muted" size={12} />
 					</span>
 				}
@@ -152,7 +152,7 @@ const NavDropdownMain = (props) => {
 					}}>
 						{renderIcon(item.icon)}
 						<span>{item.menuitem}</span>
-						{item.badge && renderBadge(item.badge)}
+						{item.badge && renderBadge(item.badge, false, item.badgecolor)}
 						<FaChevronDown className="ms-auto text-muted" size={12} />
 					</span>
 				}
@@ -180,7 +180,9 @@ const NavDropdownMain = (props) => {
 									<span className="d-flex align-items-center flex-nowrap gap-2">
 										{renderIcon(submenu.icon, true)}
 										<span className="text-nowrap">{submenu.menuitem}</span>
-										{submenu.badge ? renderBadge(submenu.badge, true) : null}
+										{submenu.badge
+											? renderBadge(submenu.badge, true, submenu.badgecolor)
+											: null}
 									</span>
 								</NavDropdown.Item>
 							);
@@ -226,7 +228,13 @@ const NavDropdownMain = (props) => {
 															onClick={(expandedMenu) => onClick(!expandedMenu)}>
 															<span className="d-flex align-items-center flex-nowrap gap-2">
 																<span className="text-nowrap">{submenuitem.menuitem}</span>
-																{submenuitem.badge ? renderBadge(submenuitem.badge, true) : null}
+																{submenuitem.badge
+																	? renderBadge(
+																			submenuitem.badge,
+																			true,
+																			submenuitem.badgecolor
+																		)
+																	: null}
 															</span>
 														</NavDropdown.Item>
 													)}
@@ -246,7 +254,7 @@ const NavDropdownMain = (props) => {
 		<Fragment>
 			{hasMounted && (
 				item.children && item.children.length > 0 ? (
-					isDesktop ? <NavbarDesktop /> : <NavbarMobile />
+					isDesktop ? NavbarDesktop() : NavbarMobile()
 				) : (
 					renderNavLink()
 				)

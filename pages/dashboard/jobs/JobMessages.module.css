@@ -1,0 +1,722 @@
+/* Job Messages — full-width messaging workspace */
+
+.pageRoot {
+  max-width: none;
+  width: 100%;
+  padding-bottom: 2.5rem;
+}
+
+/* ── Workspace card ────────────────────────────────────── */
+
+.workspace {
+  display: grid;
+  grid-template-columns: 200px minmax(280px, 400px) minmax(0, 1fr);
+  height: min(72vh, 780px);
+  min-height: min(72vh, 780px);
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.filterCol {
+  border-right: 1px solid #e2e8f0;
+  background: #f8fafc;
+  min-height: 0;
+}
+
+/* ── Filter rail ───────────────────────────────────────── */
+
+.filterRail {
+  padding: 1rem 0.75rem;
+  height: 100%;
+}
+
+.openJobsLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin-bottom: 0.85rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #4171f5;
+  background: #fff;
+  border: 1px solid #dbe4ff;
+  text-decoration: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.openJobsLink:hover {
+  background: #eef4ff;
+  border-color: #b8c9fb;
+  color: #2f5de0;
+}
+
+.folderList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.folderBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.folderBtn:hover {
+  background: #eef2f7;
+  color: #0f172a;
+}
+
+.folderBtnActive {
+  background: #e8eefc;
+  color: #1e3a8a;
+  font-weight: 600;
+}
+
+.folderBtnLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.folderBtnLabel i {
+  font-size: 1rem;
+  width: 1.1rem;
+  text-align: center;
+}
+
+.folderPill {
+  flex-shrink: 0;
+  min-width: 1.35rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #fff;
+  background: #4171f5;
+  text-align: center;
+  line-height: 1.35;
+}
+
+/* ── List pane ─────────────────────────────────────────── */
+
+.listPane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.listToolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.listToolbarRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.searchWrap {
+  position: relative;
+  flex: 1 1 180px;
+  min-width: 160px;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.searchInput {
+  padding-left: 36px !important;
+}
+
+.pageSizeSelect {
+  width: 120px;
+  flex-shrink: 0;
+}
+
+.listMeta {
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
+.listBody {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 240px;
+}
+
+.listFooter {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  flex-shrink: 0;
+  padding: 0.65rem 1rem;
+  border-top: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.stateBlock {
+  padding: 2.5rem 1.25rem;
+  text-align: center;
+  color: #dc2626;
+  font-size: 0.9rem;
+}
+
+.stateMuted {
+  color: #94a3b8;
+}
+
+.messageList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.messageRow {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  border: 0;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fafbfc;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.messageRow:hover {
+  background: #f1f5f9;
+}
+
+.messageRowUnread {
+  background: #fff;
+}
+
+.messageRowUnread .jobNumber,
+.messageRowUnread .senderName,
+.messageRowUnread .messageSnippet {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.messageRowSelected {
+  background: #eef4ff !important;
+  box-shadow: inset 3px 0 0 #4171f5;
+}
+
+.unreadDot {
+  width: 8px;
+  height: 8px;
+  margin-top: 0.45rem;
+  border-radius: 50%;
+  background: #4171f5;
+  flex-shrink: 0;
+}
+
+.unreadDotSpacer {
+  width: 8px;
+  height: 8px;
+  margin-top: 0.45rem;
+  flex-shrink: 0;
+}
+
+.messageRowMain {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.messageRowTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.messageRowMid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3.4rem 3.9rem;
+  align-items: center;
+  column-gap: 0.45rem;
+  min-width: 0;
+}
+
+.jobNumber {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #4171f5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.messageTime {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.senderName {
+  font-size: 0.84rem;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.roleChip {
+  display: inline-flex;
+  justify-content: flex-start;
+  align-items: center;
+  width: 3.4rem;
+  flex-shrink: 0;
+}
+
+.roleChip :global(.badge) {
+  min-width: 2.85rem;
+  justify-content: center;
+  text-align: center;
+}
+
+.msgCountChip {
+  display: inline-flex;
+  justify-content: flex-end;
+  align-items: center;
+  width: 100%;
+  min-height: 1.15rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.messageSnippet {
+  font-size: 0.82rem;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+}
+
+.snippetCustomer {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+/* ── Detail pane ───────────────────────────────────────── */
+
+.detailPane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: #fff;
+}
+
+.detailEmpty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.detailEmptyIcon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f5f9;
+  color: #94a3b8;
+  margin-bottom: 1rem;
+}
+
+.detailEmptyTitle {
+  margin: 0 0 0.4rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.detailEmptyText {
+  margin: 0;
+  max-width: 280px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #94a3b8;
+}
+
+.detailHeader {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+  background: #fff;
+}
+
+.backBtn {
+  display: none !important;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0 0 0.65rem !important;
+  color: #4171f5 !important;
+  text-decoration: none !important;
+  font-weight: 600;
+}
+
+.detailHeaderTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.detailJobHeading {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.2rem;
+}
+
+.detailMeta {
+  font-size: 0.82rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.closeDetailBtn {
+  color: #94a3b8 !important;
+  padding: 0.15rem !important;
+  line-height: 1;
+  font-size: 1.15rem;
+}
+
+.closeDetailBtn:hover {
+  color: #475569 !important;
+}
+
+.detailActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-top: 0.85rem;
+}
+
+.detailThreadCount {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* ── Chat thread ───────────────────────────────────────── */
+
+.chatThread {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: #f1f5f9;
+  padding: 1rem 1.1rem 1.25rem;
+}
+
+.chatMessages {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.chatBubbleRow {
+  display: flex;
+  width: 100%;
+}
+
+.chatBubbleRowAdmin {
+  justify-content: flex-end;
+}
+
+.chatBubbleRowTech {
+  justify-content: flex-start;
+}
+
+.chatBubble {
+  max-width: min(100%, 520px);
+  border-radius: 14px;
+  padding: 0.65rem 0.8rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.chatBubbleAdmin {
+  background: #4171f5;
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.chatBubbleTech {
+  background: #fff;
+  color: #0f172a;
+  border: 1px solid #e2e8f0;
+  border-bottom-left-radius: 4px;
+}
+
+.chatBubbleHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.chatBubbleSender {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.chatBubbleName {
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chatBubbleAdmin .chatBubbleName {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.chatBubbleAdmin :global(.badge) {
+  background: rgba(255, 255, 255, 0.22) !important;
+  color: #fff !important;
+}
+
+.chatBubbleTech .chatBubbleName {
+  color: #334155;
+}
+
+.chatBubbleTime {
+  font-size: 0.7rem;
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.chatBubbleText {
+  font-size: 0.9rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chatBubbleStatus {
+  margin-top: 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  opacity: 0.9;
+}
+
+.chatBubbleStatusSent {
+  opacity: 0.75;
+}
+
+.chatBubbleStatusRead {
+  opacity: 0.8;
+}
+
+.chatBubbleStatusUnread {
+  opacity: 1;
+}
+
+.chatBubbleAdmin .chatBubbleStatus {
+  color: rgba(255, 255, 255, 0.85);
+  text-align: right;
+}
+
+.chatBubbleTech .chatBubbleStatusRead,
+.chatBubbleTech .chatBubbleStatusSent {
+  color: #64748b;
+}
+
+.chatBubbleTech .chatBubbleStatusUnread {
+  color: #4171f5;
+}
+
+.chatBubbleImageWrap {
+  margin-bottom: 0.45rem;
+}
+
+.chatBubbleImage {
+  max-width: 100%;
+  max-height: 280px;
+  border-radius: 8px;
+  display: block;
+  object-fit: contain;
+}
+
+.chatBubbleAdmin .chatBubbleImage {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.chatBubbleTech .chatBubbleImage {
+  border: 1px solid #e2e8f0;
+}
+
+.chatComposer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.65rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid #e2e8f0;
+  background: #fff;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+.chatComposerInput {
+  flex: 1 1 auto;
+  min-height: 2.75rem;
+  max-height: 7rem;
+  resize: vertical;
+  font-size: 0.9rem;
+}
+
+.chatComposerSend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  min-width: 5.5rem;
+  justify-content: center;
+}
+
+/* Mobile: hide list when detail selected, hide detail when list shown */
+.paneHiddenMobile {
+  /* desktop: never hide via this class */
+}
+
+/* ── Responsive ────────────────────────────────────────── */
+
+@media (max-width: 1199.98px) {
+  .workspace {
+    grid-template-columns: 170px minmax(240px, 340px) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 991.98px) {
+  .workspace {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: auto;
+  }
+
+  .filterCol {
+    border-right: 0;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .filterRail {
+    padding: 0.75rem;
+  }
+
+  .folderList {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .folderBtn {
+    width: auto;
+  }
+
+  .openJobsLink {
+    margin-bottom: 0.65rem;
+  }
+
+  .listPane {
+    border-right: 0;
+    min-height: 360px;
+  }
+
+  .detailPane {
+    min-height: 420px;
+  }
+
+  .backBtn {
+    display: inline-flex !important;
+  }
+
+  .closeDetailBtn {
+    display: none !important;
+  }
+
+  .paneHiddenMobile {
+    display: none !important;
+  }
+
+  .chatMessages {
+    max-width: none;
+  }
+}
