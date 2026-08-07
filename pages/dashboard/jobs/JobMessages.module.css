@@ -477,6 +477,64 @@
   padding: 1rem 1.1rem 1.25rem;
 }
 
+.chatSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 760px;
+  margin: 0 auto;
+  padding-top: 0.25rem;
+}
+
+.chatSkeletonRow {
+  display: flex;
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.chatSkeletonRowAdmin {
+  justify-content: flex-end;
+}
+
+.chatSkeletonBubble {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.chatSkeletonRowAdmin .chatSkeletonBubble {
+  background: #dbe7ff;
+  border-color: #c7d7fb;
+}
+
+.chatSkeletonLine {
+  display: block;
+  height: 0.65rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #e2e8f0 0%, #f8fafc 50%, #e2e8f0 100%);
+  background-size: 200% 100%;
+  animation: jobMsgSkeletonShimmer 1.35s ease-in-out infinite;
+}
+
+.chatSkeletonRowAdmin .chatSkeletonLine {
+  background: linear-gradient(90deg, #b8cbf5 0%, #e8effc 50%, #b8cbf5 100%);
+  background-size: 200% 100%;
+}
+
+@keyframes jobMsgSkeletonShimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
 .chatMessages {
   display: flex;
   flex-direction: column;

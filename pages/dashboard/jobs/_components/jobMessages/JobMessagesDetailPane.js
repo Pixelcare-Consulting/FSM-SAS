@@ -28,6 +28,34 @@ function scrollContainerToBottom(container) {
   container.scrollTop = container.scrollHeight;
 }
 
+function ThreadSkeleton() {
+  const rows = [
+    { side: 'tech', width: '58%' },
+    { side: 'admin', width: '46%' },
+    { side: 'tech', width: '64%' },
+    { side: 'admin', width: '52%' },
+    { side: 'tech', width: '40%' },
+  ];
+  return (
+    <div className={styles.chatSkeleton} aria-busy="true" aria-label="Loading conversation">
+      {rows.map((row, index) => (
+        <div
+          key={`sk-${index}`}
+          className={`${styles.chatSkeletonRow}${
+            row.side === 'admin' ? ` ${styles.chatSkeletonRowAdmin}` : ''
+          }`}
+        >
+          <div className={styles.chatSkeletonBubble} style={{ width: row.width }}>
+            <span className={styles.chatSkeletonLine} style={{ width: '42%' }} />
+            <span className={styles.chatSkeletonLine} style={{ width: '88%' }} />
+            <span className={styles.chatSkeletonLine} style={{ width: '64%' }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const JobMessagesDetailPane = ({
   selectedMeta,
   threadMessages = [],
@@ -151,8 +179,11 @@ const JobMessagesDetailPane = ({
                 </Link>
               ) : null}
               <span className={styles.detailThreadCount}>
-                {threadMessages.length}{' '}
-                {threadMessages.length === 1 ? 'message' : 'messages'}
+                {isLoading
+                  ? 'Loading…'
+                  : `${threadMessages.length} ${
+                      threadMessages.length === 1 ? 'message' : 'messages'
+                    }`}
               </span>
             </div>
           </div>
@@ -162,11 +193,8 @@ const JobMessagesDetailPane = ({
               <div className={styles.stateBlock}>
                 {error.message || 'Failed to load conversation'}
               </div>
-            ) : isLoading && threadMessages.length === 0 ? (
-              <div className={`${styles.stateBlock} ${styles.stateMuted}`}>
-                <Spinner animation="border" size="sm" className="me-2" />
-                Loading conversation…
-              </div>
+            ) : isLoading ? (
+              <ThreadSkeleton />
             ) : threadMessages.length === 0 ? (
               <div className={`${styles.stateBlock} ${styles.stateMuted}`}>
                 No messages in this job conversation yet. Send the first reply below.
@@ -247,14 +275,14 @@ const JobMessagesDetailPane = ({
               onKeyDown={handleComposerKeyDown}
               placeholder="Type a reply… (Enter to send, Shift+Enter for new line)"
               className={styles.chatComposerInput}
-              disabled={isSending}
+              disabled={isSending || isLoading}
               aria-label="Reply message"
             />
             <Button
               variant="primary"
               className={styles.chatComposerSend}
               onClick={() => onSend?.()}
-              disabled={isSending || !draftMessage.trim()}
+              disabled={isSending || isLoading || !draftMessage.trim()}
             >
               {isSending ? (
                 <Spinner animation="border" size="sm" />

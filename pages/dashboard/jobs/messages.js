@@ -100,6 +100,19 @@ const JobMessagesHistoryPage = () => {
     });
   }, [threadData?.messages]);
 
+  // keepPreviousData can briefly show the previous job's thread — treat that as loading.
+  const threadBelongsToSelection =
+    !selectedJobId ||
+    threadMessages.length === 0 ||
+    threadMessages.every((m) => !m.jobId || m.jobId === selectedJobId);
+
+  const visibleThreadMessages = threadBelongsToSelection ? threadMessages : [];
+
+  const isThreadSkeleton =
+    Boolean(selectedJobId) &&
+    (threadLoading || threadFetching) &&
+    (!threadBelongsToSelection || visibleThreadMessages.length === 0);
+
   const markJobRead = useCallback(
     async (jobId) => {
       if (!jobId) return;
@@ -328,8 +341,8 @@ const JobMessagesHistoryPage = () => {
 
           <JobMessagesDetailPane
             selectedMeta={conversationMeta}
-            threadMessages={threadMessages}
-            isLoading={Boolean(selectedJobId) && (threadLoading || threadFetching)}
+            threadMessages={visibleThreadMessages}
+            isLoading={isThreadSkeleton}
             error={threadError}
             focusMessageId={focusMessageId}
             draftMessage={draftMessage}
