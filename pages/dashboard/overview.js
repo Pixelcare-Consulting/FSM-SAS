@@ -6,12 +6,10 @@ import {
   Button,
   Card,
   Badge,
-  Dropdown,
 } from "react-bootstrap";
 import { ApexCharts } from "widgets";
 import Swal from "sweetalert2";
 import Cookies from "js-cookie";
-import { jobService } from "../../lib/supabase/database";
 import { useCurrentUserProfile } from '@/hooks/useCurrentUser';
 import { useRouter } from "next/router";
 import Link from "next/link";
@@ -19,6 +17,7 @@ import { FaBell, FaPlus } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import { memo } from "react";
 import { useQuery } from "react-query";
+import { useJobMessagesUnreadCountQuery } from "../../hooks/queries/useJobMessagesListQuery";
 import {
   findJobStatusEntry,
   getJobStatusLabelFromList,
@@ -27,7 +26,6 @@ import {
 import {
   fetchJobStatuses,
 } from "../../utils/jobStatusSettings";
-import { jobDisplayCustomerName } from "../../lib/utils/embeddedCustomerName";
 import {
   escapeHtml,
   getReleasePages,
@@ -74,6 +72,288 @@ function distributionSliceLabel(rawStatus, jobStatusesList) {
     if (human && String(human).trim() !== key) return human;
   }
   return getJobStatusLabelFromList(key, jobStatusesList) || `Status ${key}`;
+}
+
+const PERFORMANCE_CHART_BASE = {
+  chart: {
+    type: "bar",
+    height: 350,
+    toolbar: { show: false },
+  },
+  plotOptions: {
+    bar: {
+      horizontal: false,
+      columnWidth: "55%",
+      borderRadius: 4,
+    },
+  },
+  dataLabels: {
+    enabled: false,
+  },
+  stroke: {
+    show: true,
+    width: 2,
+    colors: ["transparent"],
+  },
+  xaxis: {
+    categories: [],
+  },
+  yaxis: {
+    title: {
+      text: "Number of Jobs",
+    },
+  },
+  fill: {
+    opacity: 1,
+  },
+  legend: {
+    position: "top",
+    horizontalAlign: "left",
+  },
+  tooltip: {
+    y: {
+      formatter: function (val) {
+        return val + " jobs";
+      },
+    },
+  },
+};
+
+const TASK_DISTRIBUTION_CHART_BASE = {
+  chart: {
+    height: 300,
+    toolbar: { show: false },
+  },
+  labels: ["Loading"],
+  colors: [CHART_COLORS.default],
+  legend: {
+    position: "bottom",
+    fontSize: "12px",
+    fontWeight: 500,
+    itemMargin: { horizontal: 10, vertical: 4 },
+    markers: { width: 10, height: 10, radius: 3 },
+  },
+  plotOptions: {
+    pie: {
+      donut: {
+        size: "62%",
+      },
+    },
+  },
+  dataLabels: {
+    enabled: true,
+    formatter: function (val, opts) {
+      try {
+        const idx = opts?.seriesIndex ?? 0;
+        const sliceVals = opts?.w?.globals?.series;
+        const count = Array.isArray(sliceVals) ? sliceVals[idx] : null;
+        const pct = typeof val === "number" ? val.toFixed(1) : String(val);
+        return count != null ? `${count} (${pct}%)` : `${pct}%`;
+      } catch (e) {
+        return typeof val === "number" ? `${val.toFixed(1)}%` : "";
+      }
+    },
+  },
+  tooltip: {
+    y: {
+      formatter: function (val, opts) {
+        try {
+          const totals = opts?.w?.globals?.seriesTotals;
+          const total =
+            Array.isArray(totals) && totals.length
+              ? totals.reduce((a, b) => a + b, 0)
+              : 0;
+          const n = typeof val === "number" ? val : Number(val);
+          const percentage = total > 0 ? ((n / total) * 100).toFixed(1) : "0";
+          return `${n} jobs (${percentage}%)`;
+        } catch (e) {
+          return `${val}`;
+        }
+      },
+    },
+  },
+};
+
+const EMPTY_PERFORMANCE_SERIES = [
+  { name: "Completed", data: [] },
+  { name: "Created", data: [] },
+  { name: "In Progress", data: [] },
+];
+
+const EMPTY_FIELD_SERVICE_INSIGHTS = {
+  periodTotal: 0,
+  topStatusLabel: null,
+  topStatusCount: 0,
+  topStatusPct: null,
+  completedCount: 0,
+  completionRatePct: "0",
+  unassignedCount: 0,
+  inProgressInPeriod: 0,
+  highPriorityCount: 0,
+  overdueScheduledCount: 0,
+  uniqueCustomers: 0,
+};
+
+/** Pure builder: period API payload → dashboard metrics + chart props (no setState). */
+function buildPeriodDashboardView(periodData, jobStatusesList) {
+  if (!periodData) {
+    return {
+      totalTasks: 0,
+      activeWorkers: 0,
+      pendingTasks: 0,
+      completedToday: 0,
+      taskGrowth: 0,
+      newJobsCount: 0,
+      activeJobsCount: 0,
+      performanceChartSeries: EMPTY_PERFORMANCE_SERIES,
+      performanceCategories: [],
+      taskDistributionChartSeries: [1],
+      taskDistributionChartOptions: {
+        ...TASK_DISTRIBUTION_CHART_BASE,
+        labels: ["No jobs in this period"],
+        colors: [CHART_COLORS.other],
+      },
+      fieldServiceInsights: EMPTY_FIELD_SERVICE_INSIGHTS,
+    };
+  }
+
+  const metrics = periodData.stats || periodData.metrics || {};
+  const totalTasks = metrics.totalTasks ?? 0;
+  const activeWorkers = metrics.activeWorkers ?? 0;
+  const pendingTasks = metrics.pendingTasks ?? 0;
+  const completedToday = metrics.completedTasks ?? 0;
+  const taskGrowth = metrics.taskGrowth ?? 0;
+  const newJobsCount = metrics.newJobsCount ?? 0;
+  const activeJobsCount = metrics.activeJobsCount ?? 0;
+
+  const chart = periodData.performanceChart || periodData;
+  const labels = chart.labels || [];
+  const performanceChartSeries = [
+    { name: "Completed", data: chart.completed || [] },
+    { name: "Created", data: chart.pending || [] },
+    { name: "In Progress", data: chart.inProgress || [] },
+  ];
+  const performanceCategories = labels.length > 0 ? labels : ["No Data"];
+
+  const distObj = periodData.distribution?.statusBuckets
+    ? null
+    : periodData.distribution || {};
+  const buckets = periodData.distribution?.statusBuckets
+    ? periodData.distribution.statusBuckets
+    : Object.entries(distObj || {})
+        .map(([raw, count]) => ({ raw, count }))
+        .sort((a, b) => b.count - a.count);
+
+  const distributionLabels = buckets.map(({ raw }) =>
+    distributionSliceLabel(raw, jobStatusesList)
+  );
+  const distributionData = buckets.map(({ count }) => count);
+  const typeColors = buckets.map(({ raw }, idx) =>
+    distributionSliceColor(raw, jobStatusesList, idx)
+  );
+
+  const periodTotal =
+    metrics.totalTasks ?? buckets.reduce((s, b) => s + (b.count || 0), 0);
+  const topRaw0 = buckets[0]?.raw ?? null;
+  const topCount0 = buckets[0]?.count ?? 0;
+  const topLabel0 =
+    topRaw0 != null
+      ? distributionSliceLabel(topRaw0, jobStatusesList)
+      : periodTotal > 0
+        ? "Unspecified status"
+        : null;
+  const topPct0 =
+    periodTotal > 0 && topCount0
+      ? ((topCount0 / periodTotal) * 100).toFixed(1)
+      : null;
+
+  const insights = periodData.insights || {};
+  const topLabelFromInsights =
+    insights.topStatusRaw != null
+      ? distributionSliceLabel(insights.topStatusRaw, jobStatusesList)
+      : null;
+
+  const fieldServiceInsights = {
+    periodTotal: insights.periodTotal ?? periodTotal,
+    topStatusLabel: topLabelFromInsights ?? topLabel0,
+    topStatusCount: insights.topStatusCount ?? topCount0,
+    topStatusPct: insights.topStatusPct ?? topPct0,
+    completedCount: insights.completedCount ?? metrics.completedTasks ?? 0,
+    completionRatePct:
+      insights.completionRatePct ??
+      (periodTotal > 0
+        ? (((metrics.completedTasks ?? 0) / periodTotal) * 100).toFixed(1)
+        : "0"),
+    unassignedCount: insights.unassignedCount ?? 0,
+    inProgressInPeriod:
+      insights.inProgressInPeriod ?? metrics.activeJobsCount ?? 0,
+    highPriorityCount: insights.highPriorityCount ?? 0,
+    overdueScheduledCount: insights.overdueScheduledCount ?? 0,
+    uniqueCustomers: insights.uniqueCustomers ?? 0,
+  };
+
+  let taskDistributionChartSeries;
+  let taskDistributionChartOptions;
+  if (distributionLabels.length === 0) {
+    taskDistributionChartSeries = [1];
+    taskDistributionChartOptions = {
+      ...TASK_DISTRIBUTION_CHART_BASE,
+      labels: ["No jobs in this period"],
+      colors: [CHART_COLORS.other],
+      plotOptions: {
+        ...TASK_DISTRIBUTION_CHART_BASE.plotOptions,
+        pie: {
+          ...TASK_DISTRIBUTION_CHART_BASE.plotOptions?.pie,
+          dataLabels: {
+            ...(TASK_DISTRIBUTION_CHART_BASE.plotOptions?.pie?.dataLabels || {}),
+            minAngle: 0,
+          },
+          donut: { size: "62%" },
+        },
+      },
+    };
+  } else {
+    taskDistributionChartSeries = distributionData;
+    taskDistributionChartOptions = {
+      ...TASK_DISTRIBUTION_CHART_BASE,
+      labels: distributionLabels,
+      colors: typeColors,
+      dataLabels: {
+        ...TASK_DISTRIBUTION_CHART_BASE.dataLabels,
+        enabled: distributionData.length <= 8,
+      },
+      plotOptions: {
+        ...TASK_DISTRIBUTION_CHART_BASE.plotOptions,
+        pie: {
+          ...TASK_DISTRIBUTION_CHART_BASE.plotOptions?.pie,
+          dataLabels: {
+            ...(TASK_DISTRIBUTION_CHART_BASE.plotOptions?.pie?.dataLabels || {}),
+            minAngle: 14,
+          },
+          donut: {
+            size: "62%",
+            ...TASK_DISTRIBUTION_CHART_BASE.plotOptions?.pie?.donut,
+          },
+        },
+      },
+      stroke: { show: true, width: 2, colors: ["#fff"] },
+    };
+  }
+
+  return {
+    totalTasks,
+    activeWorkers,
+    pendingTasks,
+    completedToday,
+    taskGrowth,
+    newJobsCount,
+    activeJobsCount,
+    performanceChartSeries,
+    performanceCategories,
+    taskDistributionChartSeries,
+    taskDistributionChartOptions,
+    fieldServiceInsights,
+  };
 }
 
 const SIDEBAR_WHATS_NEW_ITEMS = getSidebarWhatsNewItems(6);
@@ -209,39 +489,18 @@ const Overview = () => {
   // State Management
   const [timeFilter, setTimeFilter] = useState("Today");
   const { profile: userDetails } = useCurrentUserProfile();
-  const [isLoading, setIsLoading] = useState(false);
-  const [overviewPeriods, setOverviewPeriods] = useState({});
-  const [allFollowUps, setAllFollowUps] = useState([]);
-  const [allCustomers, setAllCustomers] = useState([]);
-  const [lastLoginTime, setLastLoginTime] = useState(null);
   const whatsNewAutoOpenedRef = useRef(false);
 
-  useEffect(() => {
-    if (userDetails?.updated_at) {
-      setLastLoginTime(new Date(userDetails.updated_at));
-    }
-  }, [userDetails?.updated_at]);
+  // Customer metrics (not yet supplied by overview-stats API)
+  const totalCustomers = 0;
+  const activeCustomers = 0;
+  const inactiveCustomers = 0;
 
-  // Dashboard Metrics
-  const [newJobsCount, setNewJobsCount] = useState(0);
-  const [activeJobsCount, setActiveJobsCount] = useState(0);
-  const [totalTasks, setTotalTasks] = useState(0);
-  const [pendingTasks, setPendingTasks] = useState(0);
-  const [completedToday, setCompletedToday] = useState(0);
-  const [taskGrowth, setTaskGrowth] = useState(0);
-  const [activeWorkers, setActiveWorkers] = useState(0);
-  
-  // Follow Up Metrics
-  const [totalFollowUps, setTotalFollowUps] = useState(0);
-  const [loggedFollowUps, setLoggedFollowUps] = useState(0);
-  const [inProgressFollowUps, setInProgressFollowUps] = useState(0);
-  const [closedFollowUps, setClosedFollowUps] = useState(0);
-  const [cancelledFollowUps, setCancelledFollowUps] = useState(0);
-  
-  // Customer Metrics
-  const [totalCustomers, setTotalCustomers] = useState(0);
-  const [activeCustomers, setActiveCustomers] = useState(0);
-  const [inactiveCustomers, setInactiveCustomers] = useState(0);
+  const { data: jobMessagesUnreadPayload } = useJobMessagesUnreadCountQuery(
+    {},
+    { enabled: Boolean(userDetails?.id) }
+  );
+  const jobMessagesUnreadCount = jobMessagesUnreadPayload?.unreadCount ?? 0;
 
   const {
     data: overviewPayload,
@@ -265,14 +524,17 @@ const Overview = () => {
     }
   );
 
-    // Add new state for filtered metrics
-    const [filteredMetrics, setFilteredMetrics] = useState({
-      totalTasks: 0,
-      activeWorkers: 0,
-      pendingTasks: 0,
-      completedTasks: 0,
-      taskGrowth: 0
-    });
+  const overviewPeriods = useMemo(
+    () => overviewPayload?.periods || {},
+    [overviewPayload]
+  );
+  const followUpCounts = overviewPayload?.followUpCounts || {};
+  const totalFollowUps = followUpCounts.total ?? 0;
+  const loggedFollowUps = followUpCounts.logged ?? 0;
+  const inProgressFollowUps = followUpCounts.inProgress ?? 0;
+  const closedFollowUps = followUpCounts.closed ?? 0;
+  const cancelledFollowUps = followUpCounts.cancelled ?? 0;
+  const openFollowUpsCount = loggedFollowUps + inProgressFollowUps;
 
   // Chart Data - ApexCharts format (performance bar colors = Dashboard → Settings → Job Statuses)
   const [jobStatusesList, setJobStatusesList] = useState([]);
@@ -285,141 +547,41 @@ const Overview = () => {
     );
   }, [jobStatusesList]);
 
-  const [performanceChartOptions, setPerformanceChartOptions] = useState(() => ({
-    chart: {
-      type: "bar",
-      height: 350,
-      toolbar: { show: false },
-    },
-    plotOptions: {
-      bar: {
-        horizontal: false,
-        columnWidth: "55%",
-        borderRadius: 4,
-      },
-    },
-    dataLabels: {
-      enabled: false,
-    },
-    stroke: {
-      show: true,
-      width: 2,
-      colors: ["transparent"],
-    },
-    xaxis: {
-      categories: [],
-    },
-    yaxis: {
-      title: {
-        text: "Number of Jobs",
-      },
-    },
-    fill: {
-      opacity: 1,
-    },
-    colors: [0, 1, 2].map(
-      (i) => DISTRIBUTION_FALLBACK_PALETTE[i % DISTRIBUTION_FALLBACK_PALETTE.length]
-    ),
-    legend: {
-      position: "top",
-      horizontalAlign: "left",
-    },
-    tooltip: {
-      y: {
-        formatter: function (val) {
-          return val + " jobs";
-        },
-      },
-    },
-  }));
+  const periodData = useMemo(
+    () => overviewPeriods[timeFilter] || overviewPeriods.Today || null,
+    [overviewPeriods, timeFilter]
+  );
 
-  const [performanceChartSeries, setPerformanceChartSeries] = useState([
-    {
-      name: "Completed",
-      data: [],
-    },
-    {
-      name: "Created",
-      data: [],
-    },
-    {
-      name: "In Progress",
-      data: [],
-    },
-  ]);
+  const periodView = useMemo(
+    () => buildPeriodDashboardView(periodData, jobStatusesList),
+    [periodData, jobStatusesList]
+  );
 
-  const [taskDistributionChartOptions, setTaskDistributionChartOptions] = useState({
-    // `type` is set on <ApexCharts type="donut" /> — duplicating on chart.type can break Apex v4.
-    chart: {
-      height: 300,
-      toolbar: { show: false },
-    },
-    labels: ['Loading'],
-    colors: [CHART_COLORS.default],
-    legend: {
-      position: 'bottom',
-      fontSize: '12px',
-      fontWeight: 500,
-      itemMargin: { horizontal: 10, vertical: 4 },
-      markers: { width: 10, height: 10, radius: 3 },
-    },
-    plotOptions: {
-      pie: {
-        donut: {
-          size: '62%',
-        },
-      },
-    },
-    dataLabels: {
-      enabled: true,
-      formatter: function (val, opts) {
-        try {
-          const idx = opts?.seriesIndex ?? 0;
-          const sliceVals = opts?.w?.globals?.series;
-          const count = Array.isArray(sliceVals) ? sliceVals[idx] : null;
-          const pct = typeof val === 'number' ? val.toFixed(1) : String(val);
-          return count != null ? `${count} (${pct}%)` : `${pct}%`;
-        } catch (e) {
-          return typeof val === 'number' ? `${val.toFixed(1)}%` : '';
-        }
-      },
-    },
-    tooltip: {
-      y: {
-        formatter: function (val, opts) {
-          try {
-            const totals = opts?.w?.globals?.seriesTotals;
-            const total = Array.isArray(totals) && totals.length
-              ? totals.reduce((a, b) => a + b, 0)
-              : 0;
-            const n = typeof val === 'number' ? val : Number(val);
-            const percentage = total > 0 ? ((n / total) * 100).toFixed(1) : '0';
-            return `${n} jobs (${percentage}%)`;
-          } catch (e) {
-            return `${val}`;
-          }
-        },
-      },
-    },
-  });
+  const {
+    totalTasks,
+    activeWorkers,
+    pendingTasks,
+    completedToday,
+    taskGrowth,
+    activeJobsCount,
+    performanceChartSeries,
+    performanceCategories,
+    taskDistributionChartSeries,
+    taskDistributionChartOptions,
+    fieldServiceInsights,
+  } = periodView;
 
-  /** Single numeric series for donut — never start empty (Apex v4 renders blank for []). */
-  const [taskDistributionChartSeries, setTaskDistributionChartSeries] = useState([1]);
-
-  /** Dispatch-friendly stats for the same time window as the donut (created date in range). */
-  const [fieldServiceInsights, setFieldServiceInsights] = useState({
-    periodTotal: 0,
-    topStatusLabel: null,
-    topStatusCount: 0,
-    topStatusPct: null,
-    completedCount: 0,
-    completionRatePct: "0",
-    unassignedCount: 0,
-    inProgressInPeriod: 0,
-    highPriorityCount: 0,
-    overdueScheduledCount: 0,
-    uniqueCustomers: 0,
-  });
+  const performanceChartOptions = useMemo(
+    () => ({
+      ...PERFORMANCE_CHART_BASE,
+      colors: performanceBarColors,
+      xaxis: {
+        ...PERFORMANCE_CHART_BASE.xaxis,
+        categories: performanceCategories,
+      },
+    }),
+    [performanceBarColors, performanceCategories]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -434,186 +596,14 @@ const Overview = () => {
   }, []);
 
   useEffect(() => {
-    setPerformanceChartOptions((prev) => ({
-      ...prev,
-      colors: performanceBarColors,
-    }));
-  }, [performanceBarColors]);
+    if (isOverviewError) {
+      toast.error("Error loading dashboard data");
+    }
+  }, [isOverviewError]);
 
-  // Chart options are now in state, no need for memoized values
-
-// Apply pre-aggregated period payload from /api/dashboard/overview-stats
-const applyPeriodPayload = useCallback((periodData) => {
-  if (!periodData) return;
-
-  const metrics = periodData.stats || periodData.metrics || {};
-  setTotalTasks(metrics.totalTasks ?? 0);
-  setActiveWorkers(metrics.activeWorkers ?? 0);
-  setPendingTasks(metrics.pendingTasks ?? 0);
-  setCompletedToday(metrics.completedTasks ?? 0);
-  setTaskGrowth(metrics.taskGrowth ?? 0);
-  setNewJobsCount(metrics.newJobsCount ?? 0);
-  setActiveJobsCount(metrics.activeJobsCount ?? 0);
-  setFilteredMetrics({
-    totalTasks: metrics.totalTasks ?? 0,
-    activeWorkers: metrics.activeWorkers ?? 0,
-    pendingTasks: metrics.pendingTasks ?? 0,
-    completedTasks: metrics.completedTasks ?? 0,
-    taskGrowth: metrics.taskGrowth ?? 0,
-  });
-
-  const chart = periodData.performanceChart || periodData;
-  const labels = chart.labels || [];
-  setPerformanceChartSeries([
-    { name: "Completed", data: chart.completed || [] },
-    { name: "Created", data: chart.pending || [] },
-    { name: "In Progress", data: chart.inProgress || [] },
-  ]);
-  setPerformanceChartOptions((prev) => ({
-    ...prev,
-    xaxis: { ...prev.xaxis, categories: labels.length > 0 ? labels : ["No Data"] },
-  }));
-
-  const distObj = periodData.distribution?.statusBuckets
-    ? null
-    : periodData.distribution || {};
-  const buckets = periodData.distribution?.statusBuckets
-    ? periodData.distribution.statusBuckets
-    : Object.entries(distObj || {})
-        .map(([raw, count]) => ({ raw, count }))
-        .sort((a, b) => b.count - a.count);
-
-  const distributionLabels = buckets.map(({ raw }) => distributionSliceLabel(raw, jobStatusesList));
-  const distributionData = buckets.map(({ count }) => count);
-  const typeColors = buckets.map(({ raw }, idx) =>
-    distributionSliceColor(raw, jobStatusesList, idx)
-  );
-
-  const periodTotal = metrics.totalTasks ?? buckets.reduce((s, b) => s + (b.count || 0), 0);
-  const topRaw0 = buckets[0]?.raw ?? null;
-  const topCount0 = buckets[0]?.count ?? 0;
-  const topLabel0 =
-    topRaw0 != null
-      ? distributionSliceLabel(topRaw0, jobStatusesList)
-      : periodTotal > 0
-        ? "Unspecified status"
-        : null;
-  const topPct0 = periodTotal > 0 && topCount0 ? ((topCount0 / periodTotal) * 100).toFixed(1) : null;
-
-  const insights = periodData.insights || {};
-  const topLabelFromInsights =
-    insights.topStatusRaw != null
-      ? distributionSliceLabel(insights.topStatusRaw, jobStatusesList)
-      : null;
-
-  setFieldServiceInsights({
-    periodTotal: insights.periodTotal ?? periodTotal,
-    topStatusLabel: topLabelFromInsights ?? topLabel0,
-    topStatusCount: insights.topStatusCount ?? topCount0,
-    topStatusPct: insights.topStatusPct ?? topPct0,
-    completedCount: insights.completedCount ?? metrics.completedTasks ?? 0,
-    completionRatePct:
-      insights.completionRatePct ??
-      (periodTotal > 0 ? (((metrics.completedTasks ?? 0) / periodTotal) * 100).toFixed(1) : "0"),
-    unassignedCount: insights.unassignedCount ?? 0,
-    inProgressInPeriod: insights.inProgressInPeriod ?? metrics.activeJobsCount ?? 0,
-    highPriorityCount: insights.highPriorityCount ?? 0,
-    overdueScheduledCount: insights.overdueScheduledCount ?? 0,
-    uniqueCustomers: insights.uniqueCustomers ?? 0,
-  });
-
-  if (distributionLabels.length === 0) {
-    setTaskDistributionChartSeries([1]);
-    setTaskDistributionChartOptions((prev) => ({
-      ...prev,
-      labels: ["No jobs in this period"],
-      colors: [CHART_COLORS.other],
-      plotOptions: {
-        ...prev.plotOptions,
-        pie: {
-          ...prev.plotOptions?.pie,
-          dataLabels: { ...(prev.plotOptions?.pie?.dataLabels || {}), minAngle: 0 },
-          donut: { size: "62%" },
-        },
-      },
-    }));
-  } else {
-    setTaskDistributionChartSeries(distributionData);
-    setTaskDistributionChartOptions((prev) => ({
-      ...prev,
-      labels: distributionLabels,
-      colors: typeColors,
-      dataLabels: {
-        ...prev.dataLabels,
-        enabled: distributionData.length <= 8,
-      },
-      plotOptions: {
-        ...prev.plotOptions,
-        pie: {
-          ...prev.plotOptions?.pie,
-          dataLabels: {
-            ...(prev.plotOptions?.pie?.dataLabels || {}),
-            minAngle: 14,
-          },
-          donut: { size: "62%", ...prev.plotOptions?.pie?.donut },
-        },
-      },
-      stroke: { show: true, width: 2, colors: ["#fff"] },
-    }));
-  }
-}, [jobStatusesList]);
-
-useEffect(() => {
-  if (!overviewPayload) return;
-
-  const periods = overviewPayload.periods || {};
-  const followUpCounts = overviewPayload.followUpCounts || {};
-
-  setOverviewPeriods(periods);
-  setAllFollowUps([]);
-
-  setTotalFollowUps(followUpCounts.total ?? 0);
-  setLoggedFollowUps(followUpCounts.logged ?? 0);
-  setInProgressFollowUps(followUpCounts.inProgress ?? 0);
-  setClosedFollowUps(followUpCounts.closed ?? 0);
-  setCancelledFollowUps(followUpCounts.cancelled ?? 0);
-
-  applyPeriodPayload(periods.Today);
-}, [overviewPayload, applyPeriodPayload]);
-
-useEffect(() => {
-  if (isOverviewError) {
-    toast.error("Error loading dashboard data");
-  }
-}, [isOverviewError]);
-
-// Re-apply chart labels/colors when job statuses load (SAP labels/colors) or period changes
-useEffect(() => {
-  if (isOverviewLoading || !overviewPayload) return;
-  applyPeriodPayload(overviewPeriods[timeFilter]);
-}, [
-  jobStatusesList,
-  overviewPeriods,
-  timeFilter,
-  isOverviewLoading,
-  overviewPayload,
-  applyPeriodPayload,
-]);
-
-// Modified handleTimeFilterChange
-const handleTimeFilterChange = useCallback((period) => {
-  setTimeFilter(period);
-  setIsLoading(true);
-
-  try {
-    applyPeriodPayload(overviewPeriods[period]);
-  } catch (error) {
-    console.error("Error updating dashboard:", error);
-    toast.error("Error updating filter");
-  } finally {
-    setIsLoading(false);
-  }
-}, [overviewPeriods, applyPeriodPayload]);
+  const handleTimeFilterChange = useCallback((period) => {
+    setTimeFilter(period);
+  }, []);
 
 // Navigation handlers
 const handleNewTask = () => router.push("/jobs/create");
@@ -916,30 +906,34 @@ const addWelcomeAlertStyles = (popup) => {
     }
 
     .stats-row {
-      display: flex;
-      gap: 16px;
-      margin-top: 24px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 20px;
     }
 
     .stat-item {
       flex: 1;
       text-align: center;
-      padding: 16px;
+      padding: 12px 10px;
       background: #f8fafc;
       border-radius: 12px;
       border: 1px solid #e5e7eb;
     }
 
     .stat-item h3 {
-      font-size: 24px;
+      font-size: 22px;
       margin: 0;
       color: #1e293b;
+      font-variant-numeric: tabular-nums;
     }
 
     .stat-item p {
-      font-size: 13px;
+      font-size: 11px;
       color: #64748b;
       margin: 4px 0 0;
+      line-height: 1.25;
+      font-weight: 500;
     }
 
     .features-container::-webkit-scrollbar {
@@ -1095,16 +1089,17 @@ const addWelcomeAlertStyles = (popup) => {
 }
 
 .stats-row {
-  display: flex;
-  gap: 16px;
-  margin-top: 24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 20px;
   animation: fadeInUp 0.5s ease-out;
 }
 
 .stat-item {
   flex: 1;
   text-align: center;
-  padding: 16px;
+  padding: 12px 10px;
   background: #f8fafc;
   border-radius: 12px;
   border: 1px solid #e5e7eb;
@@ -1262,25 +1257,24 @@ const handleWhatsNewClick = useCallback(() => {
             </div>
           </div>
 
-          ${newJobsCount > 0 ? `
-            <div class="stats-row">
-              <div class="stat-item">
-                <h3>${newJobsCount}</h3>
-                <p>New Jobs</p>
-              </div>
-              <div class="stat-item">
-                <h3>${activeJobsCount}</h3>
-                <p>Active Jobs</p>
-              </div>
+          <div class="stats-row" aria-label="CSO portal summary">
+            <div class="stat-item">
+              <h3>${Number(openFollowUpsCount) || 0}</h3>
+              <p>Open Follow-ups</p>
             </div>
-          ` : `
-            <div class="stats-row">
-              <div class="stat-item">
-                <h3>${activeJobsCount}</h3>
-                <p>Active Jobs</p>
-              </div>
+            <div class="stat-item">
+              <h3>${Number(pendingTasks) || 0}</h3>
+              <p>Pending Jobs</p>
             </div>
-          `}
+            <div class="stat-item">
+              <h3>${Number(completedToday) || 0}</h3>
+              <p>Completed Today</p>
+            </div>
+            <div class="stat-item">
+              <h3>${Number(jobMessagesUnreadCount) || 0}</h3>
+              <p>Unread Messages</p>
+            </div>
+          </div>
         </div>
 
         <div class="welcome-right">
@@ -1369,10 +1363,10 @@ const handleWhatsNewClick = useCallback(() => {
       }
     },
   });
-}, [displayName, userDetails?.role, userDetails?.profilePicture, newJobsCount, activeJobsCount]);
+}, [displayName, userDetails?.role, userDetails?.profilePicture, openFollowUpsCount, pendingTasks, completedToday, jobMessagesUnreadCount]);
 
 useEffect(() => {
-  if (isLoading || isOverviewLoading) return;
+  if (isOverviewLoading) return;
   if (whatsNewAutoOpenedRef.current) return;
   if (isWhatsNewHiddenToday()) {
     whatsNewAutoOpenedRef.current = true;
@@ -1386,11 +1380,11 @@ useEffect(() => {
   }, 400);
 
   return () => clearTimeout(timer);
-}, [isLoading, isOverviewLoading, handleWhatsNewClick]);
+}, [isOverviewLoading, handleWhatsNewClick]);
 
 return (
   <div className="dashboard-wrapper" style={{ width: "100%", maxWidth: "100%" }}>
-    <LoadingOverlay isLoading={isLoading || isOverviewLoading} />
+    <LoadingOverlay isLoading={isOverviewLoading} />
     {/* Full-viewport-width blue strip; inner px matches layouts/dashboard/DashboardIndexTop PAGE_GUTTER */}
     <div
       className="dashboard-header"
