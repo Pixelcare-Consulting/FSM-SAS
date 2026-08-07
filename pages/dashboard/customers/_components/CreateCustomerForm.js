@@ -224,6 +224,8 @@ export default function CreateCustomerForm() {
           setDuplicateError({
             existingCode: data.existingCode,
             existingType: data.existingType,
+            existingId: data.existingId || null,
+            mergeHint: Boolean(data.mergeHint),
             message: data.message || 'A portal record already exists for this email or phone.',
           });
           return;
@@ -307,6 +309,16 @@ export default function CreateCustomerForm() {
           <Link href={`/customer-leads?highlight=${encodeURIComponent(duplicateError.existingCode)}`}>
             View {duplicateError.existingCode} in Portal Customers
           </Link>
+          {duplicateError.existingType === 'customer' && duplicateError.existingCode && (
+            <>
+              {' · '}
+              <Link
+                href={`/dashboard/customers/${encodeURIComponent(duplicateError.existingCode)}`}
+              >
+                Open existing / Merge
+              </Link>
+            </>
+          )}
         </Alert>
       )}
 

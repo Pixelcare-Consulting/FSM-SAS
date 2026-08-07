@@ -271,9 +271,6 @@ import TeamGrid from 'sub-components/dashboard/projects/single/team/TeamGrid';
 import Sidebar from 'sub-components/dashboard/chat/sidebar/Sidebar';
 import ChatBox from 'sub-components/dashboard/chat/chatbox/ChatBox';
 
-// sub components for /dashboard/task-kanban page
-import KanbanColumn from 'sub-components/dashboard/task-kanban/KanbanColumn';
-
 // sub components for /dashboard/calendar page v2.1.0
 import AddEditEvent from 'sub-components/dashboard/calendar/AddEditEvent';
 import AddEditSchedule from './dashboard/calendar/AddEditSchedule';
@@ -376,7 +373,6 @@ export {
    WorkerGridCard,
    WorkersListItems,
    JustifiedGallery,
-   KanbanColumn,
    LaunchDate,
    LeadTestimonialSection,
    MostViewPages,

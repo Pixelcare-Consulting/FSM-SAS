@@ -44,11 +44,14 @@ import {
 import {
   buildGroupedLocationOptions,
   countGroupedLocationOptions,
+  filterActiveLocationOptions,
   flattenLocationOptions,
   locationSelectGroupLabel,
   locationSelectOptionLabel,
   locationSelectStyles,
 } from "../../../lib/jobs/jobFormLocationSelect";
+import { fetchCustomerAddressDetails } from "../../../lib/customers/fetchCustomerAddressDetails";
+import { withLocationOptionStatus } from "../../../lib/jobs/locationOptionAddressStatus";
 import {
   mapAssignableWorkersToOptions,
   mergeWorkerSelectOptions,
@@ -1661,7 +1664,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
 
       const portalAddress = String(selectedCustomer.customer_address || "").trim();
       // Fallback only: bare customer_address site label when getLocation returns nothing.
-      const fallbackPrimaryLocation = portalAddress
+      let fallbackPrimaryLocation = portalAddress
         ? {
             value: portalAddress,
             label: portalAddress,
@@ -1674,26 +1677,43 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
             city: "",
             countryName: "",
             zipCode: "",
+            status: "Active",
           }
         : null;
 
       // Load the customer's real service locations (full addresses) the same way the
       // SAP branch does. /api/getLocation -> fetchMasterlistLocationsByCardCode returns
       // full customer_location rows for CP* (portal) codes via mapCustomerBundleToJobFormLocations.
+      // Keep the job's current site even when Inactive so Edit does not blank out.
+      const savedPortalLocation = isSameAsInitialCustomer
+        ? initialJobData?.location
+        : null;
+      const keepPortalSiteIds = [
+        savedPortalLocation?.locationName,
+        savedPortalLocation?.siteId,
+        savedPortalLocation?.address?.streetAddress,
+      ].filter(Boolean);
+
       let portalGroupedLocations = [];
       let flatPortalLocations = [];
+      const portalCardCode = resolveCustomerCardCode(initialJobData, selectedCustomer);
       try {
-        const portalCardCode = resolveCustomerCardCode(initialJobData, selectedCustomer);
         if (portalCardCode) {
           const locationsResponse = await fetch("/api/getLocation", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ cardCode: portalCardCode }),
+            body: JSON.stringify({
+              cardCode: portalCardCode,
+              keepSiteIds: keepPortalSiteIds,
+            }),
           });
           if (locationsResponse.ok) {
             const locationsData = await locationsResponse.json();
             if (Array.isArray(locationsData) && locationsData.length > 0) {
-              portalGroupedLocations = buildGroupedLocationOptions(locationsData);
+              portalGroupedLocations = filterActiveLocationOptions(
+                buildGroupedLocationOptions(locationsData),
+                { keepSiteIds: keepPortalSiteIds }
+              );
               flatPortalLocations = flattenLocationOptions(portalGroupedLocations);
             }
           }
@@ -1705,17 +1725,32 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
         );
       }
 
+      if (flatPortalLocations.length === 0 && fallbackPrimaryLocation && portalCardCode) {
+        try {
+          const maps = await fetchCustomerAddressDetails(portalCardCode);
+          fallbackPrimaryLocation = withLocationOptionStatus(
+            fallbackPrimaryLocation,
+            maps
+          );
+        } catch (statusErr) {
+          console.warn(
+            "Portal primary address status lookup failed:",
+            statusErr?.message || statusErr
+          );
+        }
+      }
+
       const hasRealPortalLocations = flatPortalLocations.length > 0;
       const portalLocationOptions = hasRealPortalLocations
         ? portalGroupedLocations
         : fallbackPrimaryLocation
-          ? [fallbackPrimaryLocation]
+          ? filterActiveLocationOptions([fallbackPrimaryLocation], {
+              keepSiteIds: keepPortalSiteIds,
+            })
           : [];
       const selectablePortalLocations = hasRealPortalLocations
         ? flatPortalLocations
-        : fallbackPrimaryLocation
-          ? [fallbackPrimaryLocation]
-          : [];
+        : flattenLocationOptions(portalLocationOptions);
 
       setLocations(portalLocationOptions);
       setEquipments([]);
@@ -1873,11 +1908,20 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
     };
 
     const loadLocations = async () => {
+      const keepSiteIds = [
+        savedLocation?.locationName,
+        savedLocation?.siteId,
+        savedLocation?.address?.streetAddress,
+      ].filter(Boolean);
+
       const locationsResponse = await fetch("/api/getLocation", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cardCode }),
+        body: JSON.stringify({
+          cardCode,
+          keepSiteIds,
+        }),
       });
 
       if (!locationsResponse.ok) {
@@ -1885,8 +1929,11 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
       }
 
       const locationsData = await locationsResponse.json();
-      const groupedLocations = buildGroupedLocationOptions(
-        Array.isArray(locationsData) ? locationsData : []
+      const groupedLocations = filterActiveLocationOptions(
+        buildGroupedLocationOptions(
+          Array.isArray(locationsData) ? locationsData : []
+        ),
+        { keepSiteIds }
       );
       return {
         ok: true,

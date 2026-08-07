@@ -131,7 +131,6 @@ import {
   buildFollowUpSnapshot,
   buildTaskSnapshot,
 } from '../../../../utils/auditSnapshots';
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import format from "date-fns/format";
 // Removed Firebase auth import - using Supabase
 import { getDefaultJobStatuses, getJobStatusColorFromList, getJobStatusLabelFromList } from '../../../../utils/jobStatusSettings';

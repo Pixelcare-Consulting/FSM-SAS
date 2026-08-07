@@ -2906,12 +2906,12 @@ button.actionIcon:disabled {
   white-space: pre-wrap;
 }
 
-/* Floating Chat Button - icon only, no circle.
-   Stack above dashboard PortalAssistantChat FAB (1.25rem + 3.25rem tall + gap). */
+/* Floating Chat Button - Job Messages only (icon, no circle).
+   Pixelcare Assistant is hidden on Job View Details so this sits in the corner alone. */
 .floatingChatButton {
   position: fixed;
-  bottom: calc(1.25rem + 3.25rem + 0.75rem);
-  right: 20px;
+  bottom: 1.25rem;
+  right: 1.25rem;
   width: auto;
   height: auto;
   padding: 0;
@@ -2959,11 +2959,11 @@ button.actionIcon:disabled {
   border: 2px solid white;
 }
 
-/* Chat Popup Window */
+/* Chat Popup Window — bottom-right (assistant FAB hidden on this page) */
 .chatPopup {
   position: fixed;
-  bottom: calc(1.25rem + 3.25rem + 0.5rem);
-  right: 20px;
+  bottom: 1.25rem;
+  right: 1.25rem;
   width: 380px;
   max-height: 600px;
   background: white;

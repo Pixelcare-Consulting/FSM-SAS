@@ -23,11 +23,14 @@ import { normalizeJobTaskNameForInsert } from "../../../lib/jobs/jobTaskFields";
 import {
   buildGroupedLocationOptions,
   countGroupedLocationOptions,
+  filterActiveLocationOptions,
   flattenLocationOptions,
   locationSelectGroupLabel,
   locationSelectOptionLabel,
   locationSelectStyles,
 } from "../../../lib/jobs/jobFormLocationSelect";
+import { fetchCustomerAddressDetails } from "../../../lib/customers/fetchCustomerAddressDetails";
+import { withLocationOptionStatus } from "../../../lib/jobs/locationOptionAddressStatus";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import {
   mapAssignableWorkersToOptions,
@@ -1358,24 +1361,74 @@ const AddNewJobs = ({ validateJobForm }) => {
           : []
       );
 
-      // Build location option from customer_address and auto-select it
-      const primaryLocation = selectedCustomer.customer_address
-        ? {
-            value: "primary",
-            label: selectedCustomer.customer_address,
-            address: selectedCustomer.customer_address,
-            siteId: "Primary",
-            street: selectedCustomer.customer_address,
-            streetNo: "",
-            block: "",
-            building: "",
-            city: "",
-            countryName: "",
-            zipCode: "",
+      // Prefer real masterlist sites (Active only). Fall back to synthetic primary
+      // from customer_address only when that address is not Inactive.
+      let portalLocationOptions = [];
+      let selectedPortalLocation = null;
+      const portalCardCode = String(
+        selectedCustomer.cardCode || selectedOption?.value || selectedOption?.cardCode || ""
+      ).trim();
+
+      try {
+        if (portalCardCode) {
+          const locationsResponse = await fetch("/api/getLocation", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cardCode: portalCardCode }),
+          });
+          if (locationsResponse.ok) {
+            const locationItems = await locationsResponse.json();
+            const items = Array.isArray(locationItems) ? locationItems : [];
+            if (items.length > 0) {
+              portalLocationOptions = filterActiveLocationOptions(
+                buildGroupedLocationOptions(items)
+              );
+              const flat = flattenLocationOptions(portalLocationOptions);
+              if (flat.length === 1) selectedPortalLocation = flat[0];
+            }
           }
-        : null;
-      setLocations(primaryLocation ? [primaryLocation] : []);
-      setSelectedLocation(primaryLocation);
+        }
+      } catch (portalLocError) {
+        console.warn(
+          "Portal location load failed; falling back to customer_address:",
+          portalLocError
+        );
+      }
+
+      if (portalLocationOptions.length === 0 && selectedCustomer.customer_address) {
+        let primaryLocation = {
+          value: "primary",
+          label: selectedCustomer.customer_address,
+          address: selectedCustomer.customer_address,
+          siteId: "Primary",
+          street: selectedCustomer.customer_address,
+          streetNo: "",
+          block: "",
+          building: "",
+          city: "",
+          countryName: "",
+          zipCode: "",
+          status: "Active",
+        };
+        try {
+          if (portalCardCode) {
+            const maps = await fetchCustomerAddressDetails(portalCardCode);
+            primaryLocation = withLocationOptionStatus(primaryLocation, maps);
+          }
+        } catch (statusErr) {
+          console.warn(
+            "Portal primary address status lookup failed:",
+            statusErr?.message || statusErr
+          );
+        }
+        const activePrimary = filterActiveLocationOptions([primaryLocation]);
+        portalLocationOptions = activePrimary;
+        selectedPortalLocation = activePrimary[0] || null;
+      }
+
+      setLocations(portalLocationOptions);
+      setSelectedLocation(selectedPortalLocation);
 
       // Auto-populate contact fields and reset equipments for portal customer
       setSelectedContact(selectedCustomer.email || selectedCustomer.phone_number ? primaryContact : null);
@@ -1393,19 +1446,24 @@ const AddNewJobs = ({ validateJobForm }) => {
           mobilePhone: "",
           email: selectedCustomer.email || "",
         },
-        location: {
-          locationName: selectedCustomer.customer_address ? "Primary" : "",
-          address: {
-            streetNo: "",
-            streetAddress: selectedCustomer.customer_address || "",
-            block: "",
-            buildingNo: "",
-            country: "",
-            stateProvince: "",
-            city: "",
-            postalCode: "",
-          },
-        },
+        location: selectedPortalLocation
+          ? {
+              ...prev.location,
+              ...buildLocationFormPatchFromSelection(selectedPortalLocation),
+            }
+          : {
+              locationName: "",
+              address: {
+                streetNo: "",
+                streetAddress: "",
+                block: "",
+                buildingNo: "",
+                country: "",
+                stateProvince: "",
+                city: "",
+                postalCode: "",
+              },
+            },
       }));
       return;
     }
@@ -1539,7 +1597,9 @@ const AddNewJobs = ({ validateJobForm }) => {
         const items = Array.isArray(locationItems) ? locationItems : [];
 
         if (items.length > 0) {
-          const groupedLocations = buildGroupedLocationOptions(items);
+          const groupedLocations = filterActiveLocationOptions(
+            buildGroupedLocationOptions(items)
+          );
           setLocations(groupedLocations);
           const flatLocations = flattenLocationOptions(groupedLocations);
           if (flatLocations.length === 1) {
@@ -1568,8 +1628,9 @@ const AddNewJobs = ({ validateJobForm }) => {
             },
           });
         } else {
+          let fallbackLocation = null;
           if (selectedCustomer?.customer_address) {
-            const fallbackLocation = {
+            fallbackLocation = {
               value: "primary",
               label: selectedCustomer.customer_address,
               address: selectedCustomer.customer_address,
@@ -1581,7 +1642,22 @@ const AddNewJobs = ({ validateJobForm }) => {
               city: "",
               countryName: "",
               zipCode: "",
+              status: "Active",
             };
+            try {
+              const maps = await fetchCustomerAddressDetails(cardCode);
+              fallbackLocation = withLocationOptionStatus(fallbackLocation, maps);
+            } catch (statusErr) {
+              console.warn(
+                "Fallback primary address status lookup failed:",
+                statusErr?.message || statusErr
+              );
+            }
+            const activeFallback = filterActiveLocationOptions([fallbackLocation]);
+            fallbackLocation = activeFallback[0] || null;
+          }
+
+          if (fallbackLocation) {
             setLocations([fallbackLocation]);
             setSelectedLocation(fallbackLocation);
             setFormData((prevFormData) => ({
@@ -1593,9 +1669,10 @@ const AddNewJobs = ({ validateJobForm }) => {
             }));
           } else {
             setLocations([]);
+            setSelectedLocation(null);
           }
           toast(
-            selectedCustomer?.customer_address
+            fallbackLocation
               ? "No SAP sites found — using customer address from masterlist."
               : "No locations found for this customer.",
             {

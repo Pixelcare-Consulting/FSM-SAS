@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/router';
 import {
@@ -13,6 +13,45 @@ import FriendlyAssistantMessage from './FriendlyAssistantMessage';
 import styles from './PortalAssistantChat.module.css';
 
 const PORTAL_ID = 'fsm-dashboard-help-root';
+
+/** Static /dashboard/jobs/* routes that are not the Job View Details page. */
+const JOBS_NON_DETAIL_SEGMENTS = new Set([
+  'list-jobs',
+  'create-jobs',
+  'edit-jobs',
+  'live-tracking',
+  'migration',
+]);
+
+/**
+ * Job View Details uses /dashboard/jobs/[jobId] and owns the Job Messages FAB.
+ * Hide Pixelcare Assistant there so the two chat icons do not stack.
+ */
+export function isJobViewDetailsPath(pathname) {
+  if (!pathname || typeof pathname !== 'string') return false;
+  const match = pathname.match(/^\/dashboard\/jobs\/([^/]+)\/?$/);
+  if (!match) return false;
+  return !JOBS_NON_DETAIL_SEGMENTS.has(match[1]);
+}
+
+function subscribePortalRoot() {
+  return () => {};
+}
+
+function getPortalRoot() {
+  let el = document.getElementById(PORTAL_ID);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = PORTAL_ID;
+    el.setAttribute('data-fsm-dashboard-help', '');
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+function getPortalRootServer() {
+  return null;
+}
 
 async function handleSessionExpired(router, message) {
   try {
@@ -32,39 +71,28 @@ export default function PortalAssistantChat() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [portalEl, setPortalEl] = useState(null);
+  const portalEl = useSyncExternalStore(
+    subscribePortalRoot,
+    getPortalRoot,
+    getPortalRootServer
+  );
   const threadRef = useRef(null);
   const inputRef = useRef(null);
+  const hideOnJobDetails = isJobViewDetailsPath(router.pathname);
 
-  useEffect(() => {
-    let el = document.getElementById(PORTAL_ID);
-    const created = !el;
-    if (!el) {
-      el = document.createElement('div');
-      el.id = PORTAL_ID;
-      el.setAttribute('data-fsm-dashboard-help', '');
-      document.body.appendChild(el);
-    }
-    setPortalEl(el);
-    return () => {
-      setPortalEl(null);
-      if (created && el.parentNode) {
-        el.parentNode.removeChild(el);
-      }
-    };
-  }, []);
+  const panelOpen = open && !hideOnJobDetails;
 
   useEffect(() => {
     const node = threadRef.current;
     if (!node) return;
     node.scrollTop = node.scrollHeight;
-  }, [messages, loading, open]);
+  }, [messages, loading, panelOpen]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!panelOpen) return;
     const t = setTimeout(() => inputRef.current?.focus(), 50);
     return () => clearTimeout(t);
-  }, [open]);
+  }, [panelOpen]);
 
   const send = useCallback(async () => {
     const text = input.trim();
@@ -124,13 +152,13 @@ export default function PortalAssistantChat() {
     }
   };
 
-  if (!portalEl) {
+  if (!portalEl || hideOnJobDetails) {
     return null;
   }
 
   const layer = (
     <div className={styles.layer}>
-      {open && (
+      {panelOpen && (
         <button
           type="button"
           className={styles.backdrop}
@@ -142,14 +170,14 @@ export default function PortalAssistantChat() {
       <button
         type="button"
         className={styles.fab}
-        aria-label={open ? 'Close help' : 'Open help'}
-        aria-expanded={open}
+        aria-label={panelOpen ? 'Close help' : 'Open help'}
+        aria-expanded={panelOpen}
         onClick={() => setOpen((v) => !v)}
       >
         <ChatBubbleLeftRightIcon className={styles.fabIcon} aria-hidden />
       </button>
 
-      {open && (
+      {panelOpen && (
         <aside className={styles.panel} aria-label="Help chat">
           <header className={styles.head}>
             <div className={styles.headText}>

@@ -10,6 +10,26 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.16.0',
+    date: '2026-08-07',
+    title: 'Inactive job sites + merge duplicate customers',
+    notes: [
+      'feature: Admins can find and merge duplicate customer accounts (portal, SAP customer, and lead) so jobs and history sit under one surviving code.',
+      'improvement: Inactive service sites no longer appear when creating a new job, so only active addresses are offered.',
+      'fix: Creating a portal customer that matches an existing email or phone now offers a clear link to open that account (and merge if needed).',
+    ],
+  },
+  {
+    version: '3.15.25',
+    date: '2026-08-07',
+    title: 'Job Messages corner + deploy fix',
+    notes: [
+      'improvement: On Job View Details, only Job Messages stays in the bottom-right corner; Pixelcare Assistant is hidden there so the two chat icons no longer stack.',
+      'improvement: The CMS posts list loads more cleanly without pulling in unrelated board tools.',
+      'fix: Deployments no longer fail because of a missing drag-and-drop library used by older board templates.',
+    ],
+  },
+  {
     version: '3.15.24',
     date: '2026-07-21',
     title: 'Fix portal CP code collision with soft-deleted customers',

@@ -21,7 +21,9 @@ import { NotesTab } from 'sub-components/customer/NotesTab';
 import QuotationsTab from 'sub-components/customer/QuotationsTab';
 import Link from 'next/link';
 import Cookies from 'js-cookie';
+import toast from 'react-hot-toast';
 import { MasterlistEntityEditModal } from '../../../sub-components/dashboard/MasterlistEntityEditModal';
+import CustomerMergeModal from '../../../components/customers/CustomerMergeModal';
 import {
   enrichPartnerWithSapContacts,
   partnerHasMeaningfulContacts,
@@ -48,6 +50,8 @@ const ViewCustomer = () => {
   const [equipments, setEquipments] = useState(null);
   const [visitedTabs, setVisitedTabs] = useState(() => new Set(['accountInfo']));
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const isAdmin = Cookies.get('isAdmin') === 'true';
   const router = useRouter();
   const resolvedCustomerId = useResolvedCustomerCardCode(router);
   const sapContactsEnrichAttemptedRef = useRef(false);
@@ -439,6 +443,20 @@ const ViewCustomer = () => {
                   <i className="fe fe-arrow-left"></i>
                   Back to Customers
                 </Button>
+                {isAdmin && (
+                  <Button
+                    variant="outline-light"
+                    className="d-flex align-items-center gap-2"
+                    style={{
+                      padding: "0.5rem 1rem",
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                    }}
+                    onClick={() => setMergeModalOpen(true)}
+                  >
+                    <i className="fe fe-git-merge" />
+                    Find duplicates
+                  </Button>
+                )}
                 {masterlistEditable && (
                   <Button
                     variant="outline-light"
@@ -467,6 +485,28 @@ const ViewCustomer = () => {
         customerData={customerData}
         onSaved={refreshCustomerDetail}
       />
+
+      {isAdmin && (
+        <CustomerMergeModal
+          show={mergeModalOpen}
+          onHide={() => setMergeModalOpen(false)}
+          customerId={customerUuid}
+          customerCode={resolvedCustomerId}
+          onMerged={(result) => {
+            const code = result?.survivor?.code;
+            toast.success(
+              code
+                ? `Accounts merged. Opening ${code}.`
+                : 'Accounts merged successfully.'
+            );
+            if (code && code !== resolvedCustomerId) {
+              router.push(`/dashboard/customers/${encodeURIComponent(code)}`);
+            } else {
+              refreshCustomerDetail();
+            }
+          }}
+        />
+      )}
 
       <Row>
         <Col xl={12} lg={12} md={12} sm={12}>

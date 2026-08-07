@@ -35,6 +35,7 @@ const ACTION_LABELS = {
   WORKER_SAP_SNAPSHOT_SYNC: 'Worker SAP snapshot sync',
   WORKER_DELETE: 'Worker deleted',
   CUSTOMER_DELETE: 'Customer deleted',
+  CUSTOMER_MERGE: 'Customer accounts merged',
   LEAD_CREATE: 'Lead created',
   LEAD_UPDATE: 'Lead updated',
   LEAD_DELETE: 'Lead deleted',

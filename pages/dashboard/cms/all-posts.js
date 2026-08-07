@@ -3,8 +3,8 @@ import React, { Fragment } from 'react';
 import Link from 'next/link';
 import { Col, Row, Card, Nav, Tab, Breadcrumb } from 'react-bootstrap';
 
-// import sub components
-import { PostsTable } from 'sub-components';
+// import sub components (direct path — avoid barrel pulling unrelated modules)
+import PostsTable from 'sub-components/dashboard/cms/all-posts/PostsTable';
 
 // import data files
 import {

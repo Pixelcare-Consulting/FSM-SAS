@@ -1,7 +1,7 @@
 // import node module libraries
 import React, { Fragment, useState, useEffect } from 'react';
 import { Dropdown, Card, Button } from 'react-bootstrap';
-import { Droppable } from 'react-beautiful-dnd';
+import { Droppable } from '@hello-pangea/dnd';
 import Link from 'next/link';
 
 // import sub custom components
@@ -54,7 +54,7 @@ const KanbanColumn = (props) => {
 		);
 	};
 
-	/** Nextjs Hack for react-beautiful-dnd - Start */
+	/** Nextjs Hack for @hello-pangea/dnd - Start */
 	const [enabled, setEnabled] = useState(false);
 	useEffect(() => {
 		const animation = requestAnimationFrame(() => setEnabled(true));	
@@ -66,7 +66,7 @@ const KanbanColumn = (props) => {
 	if (!enabled) {
 		return null;
 	}	
-	/** Nextjs Hack for react-beautiful-dnd - End */
+	/** Nextjs Hack for @hello-pangea/dnd - End */
 
 	return (
 		<Fragment>

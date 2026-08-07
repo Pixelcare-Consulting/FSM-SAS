@@ -1,6 +1,6 @@
 // import node module libraries
 import React, { Fragment, useState } from 'react';
-import { Draggable } from 'react-beautiful-dnd';
+import { Draggable } from '@hello-pangea/dnd';
 import Link from 'next/link';
 import { Dropdown, Card, Badge, Form } from 'react-bootstrap';
 import { useSelector, useDispatch } from 'react-redux'

@@ -159,7 +159,9 @@ export default async function handler(req, res) {
         message: `A portal record already exists for this email or phone (${duplicate.existingCode}).`,
         existingCode: duplicate.existingCode,
         existingType: duplicate.existingType,
+        existingId: duplicate.existingId || null,
         suggestion: duplicate.suggestion,
+        mergeHint: true,
       });
     }
   } catch (dupErr) {

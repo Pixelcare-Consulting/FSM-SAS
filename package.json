@@ -1,6 +1,6 @@
 {
   "name": "sas-sapb1-portal",
-  "version": "3.15.24",
+  "version": "3.16.0",
   "private": true,
   "packageManager": "pnpm@10.8.0",
   "scripts": {
@@ -16,6 +16,7 @@
     "test:scheduler-address": "node tests/schedulerJobAddress.test.mjs",
     "test:job-status-filter": "node tests/jobStatusFilter.test.mjs",
     "test:job-list-search": "node tests/jobListSearch.test.mjs",
+    "test:location-active-filter": "node tests/filterActiveLocationOptions.test.mjs",
     "test:manual": "echo 'See tests/manual-test-checklist.md for manual testing steps'",
     "test:create-user": "node scripts/create-test-user.js",
     "test:create-users": "node scripts/create-test-user.js --multiple",
@@ -91,6 +92,7 @@
     "@fullcalendar/list": "^6.1.15",
     "@fullcalendar/react": "^6.1.15",
     "@fullcalendar/timegrid": "^6.1.15",
+    "@hello-pangea/dnd": "^18.0.1",
     "@heroicons/react": "^2.1.5",
     "@hookform/resolvers": "^3.9.0",
     "@mdi/js": "^7.4.47",
@@ -157,7 +159,6 @@
     "quill-resize-module": "^2.1.3",
     "react": "^18.3.1",
     "react-apexcharts": "^1.9.0",
-    "react-beautiful-dnd": "^13.1.1",
     "react-bootstrap": "^2.10.5",
     "react-bootstrap-icons": "^1.11.4",
     "react-chartjs-2": "^5.2.0",
