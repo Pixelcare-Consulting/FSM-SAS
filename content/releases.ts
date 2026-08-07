@@ -10,6 +10,23 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.17.0',
+    date: '2026-08-07',
+    title: 'Job Messages history',
+    notes: [
+      'feature: View All Messages opens a full history across jobs — with job numbers, senders, timestamps, and a link back to each job.',
+      'fix: Sending a Job Message works again for portal admins who are not also set up as field technicians.',
+    ],
+  },
+  {
+    version: '3.16.6',
+    date: '2026-08-07',
+    title: 'Dashboard What\'s New from releases',
+    notes: [
+      'improvement: What\'s New on the dashboard now shows real product updates from release notes, one version at a time, and you can choose not to see the popup again today.',
+    ],
+  },
+  {
     version: '3.16.5',
     date: '2026-08-07',
     title: 'Job History date range filter',

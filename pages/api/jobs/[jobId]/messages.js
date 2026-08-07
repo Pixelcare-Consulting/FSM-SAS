@@ -7,6 +7,42 @@ import {
   AUDIT_STATUS,
 } from '../../../../lib/services/auditLog';
 
+const MESSAGE_SELECT =
+  'id, job_id, technician_job_id, sender_type, message, image_url, admin_id, created_at, updated_at, deleted_at, deleted_by_user_ids';
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Resolve a technician_jobs.id for the job (column is NOT NULL in production).
+ */
+async function resolveTechnicianJobId(supabase, jobId, requestedId) {
+  if (requestedId && UUID_RE.test(String(requestedId))) {
+    const { data } = await supabase
+      .from('technician_jobs')
+      .select('id')
+      .eq('id', requestedId)
+      .eq('job_id', jobId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (data?.id) return data.id;
+  }
+
+  const { data: fallback, error } = await supabase
+    .from('technician_jobs')
+    .select('id')
+    .eq('job_id', jobId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.warn('Messages API: technician_jobs lookup failed', error.message);
+  }
+  return fallback?.id || null;
+}
+
 /**
  * POST /api/jobs/[jobId]/messages
  * Send a job chat message. For ADMIN messages, admin_id is set server-side from the logged-in user.
@@ -58,36 +94,81 @@ export default async function handler(req, res) {
       });
     }
 
-    const resolvedSenderType = sender_type === 'TECHNICIAN' ? 'TECHNICIAN' : 'ADMIN';
-    const adminUserId = resolvedSenderType === 'ADMIN' ? (userData?.id ?? uid) : null;
-    if (resolvedSenderType === 'ADMIN' && !adminUserId) {
+    if (!userData?.id && !uid) {
       return res.status(401).json({
         success: false,
         message: 'User id not available',
       });
     }
 
+    const resolvedSenderType = sender_type === 'TECHNICIAN' ? 'TECHNICIAN' : 'ADMIN';
+    const adminUserId =
+      resolvedSenderType === 'ADMIN' ? String(userData?.id ?? uid) : null;
+
+    const supabase = getSupabaseAdmin();
+    const resolvedTechnicianJobId = await resolveTechnicianJobId(
+      supabase,
+      jobId,
+      technician_job_id
+    );
+
+    if (!resolvedTechnicianJobId) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'This job has no technician assignment yet. Assign a technician before sending messages.',
+      });
+    }
+
     const insertPayload = {
       job_id: jobId,
-      technician_job_id: technician_job_id || null,
+      technician_job_id: resolvedTechnicianJobId,
       sender_type: resolvedSenderType,
       message: messageText,
       image_url: null,
     };
-    if (resolvedSenderType === 'ADMIN') {
-      insertPayload.admin_id = String(adminUserId);
+
+    let includeAdminId = false;
+    if (resolvedSenderType === 'ADMIN' && adminUserId && UUID_RE.test(adminUserId)) {
+      // Intended: users.id. Production may still FK to technicians(user_id) — retry without on failure.
+      includeAdminId = true;
+      insertPayload.admin_id = adminUserId;
     }
 
     if (resolvedSenderType === 'ADMIN') {
-      console.log('Messages API: inserting with admin_id', { admin_id: insertPayload.admin_id, uid, jobId: jobId?.slice(0, 8) });
+      console.log('Messages API: inserting with admin_id', {
+        admin_id: insertPayload.admin_id || null,
+        uid,
+        jobId: String(jobId).slice(0, 8),
+        technician_job_id: resolvedTechnicianJobId,
+      });
     }
 
-    const supabase = getSupabaseAdmin();
-    const { data: inserted, error } = await supabase
+    let { data: inserted, error } = await supabase
       .from('job_technician_admin_messages')
       .insert(insertPayload)
-      .select('id, job_id, technician_job_id, sender_type, message, image_url, admin_id, created_at, updated_at, deleted_at, deleted_by_user_ids')
+      .select(MESSAGE_SELECT)
       .single();
+
+    // Wrong production FK (technicians.user_id): retry without admin_id so send still works.
+    if (
+      error &&
+      includeAdminId &&
+      /admin_id|technicians|foreign key/i.test(String(error.message || ''))
+    ) {
+      console.warn(
+        'Messages API: admin_id rejected by FK; retrying without admin_id',
+        error.message
+      );
+      delete insertPayload.admin_id;
+      const retry = await supabase
+        .from('job_technician_admin_messages')
+        .insert(insertPayload)
+        .select(MESSAGE_SELECT)
+        .single();
+      inserted = retry.data;
+      error = retry.error;
+    }
 
     if (error) {
       console.error('Messages API insert error:', error);
@@ -99,19 +180,6 @@ export default async function handler(req, res) {
     }
 
     let data = inserted;
-    if (resolvedSenderType === 'ADMIN' && inserted?.id && insertPayload.admin_id) {
-      const { data: updated, error: updateErr } = await supabase
-        .from('job_technician_admin_messages')
-        .update({ admin_id: insertPayload.admin_id })
-        .eq('id', inserted.id)
-        .select('id, job_id, technician_job_id, sender_type, message, image_url, admin_id, created_at, updated_at, deleted_at, deleted_by_user_ids')
-        .single();
-      if (!updateErr && updated) {
-        data = updated;
-      } else if (updateErr) {
-        console.error('Messages API admin_id update error:', updateErr);
-      }
-    }
 
     void writeAuditLogFromRequest(req, {
       action: AUDIT_ACTIONS.JOB_MESSAGE_CREATE,
@@ -122,7 +190,8 @@ export default async function handler(req, res) {
       details: {
         message_id: data?.id,
         sender_type: resolvedSenderType,
-        technician_job_id: technician_job_id || null,
+        technician_job_id: resolvedTechnicianJobId,
+        admin_id: data?.admin_id || null,
       },
       status: AUDIT_STATUS.SUCCESS,
     });

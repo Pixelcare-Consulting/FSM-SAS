@@ -308,6 +308,10 @@ const nextConfig = {
         destination: "/dashboard/jobs/live-tracking",
       },
       {
+        source: "/jobs/messages",
+        destination: "/dashboard/jobs/messages",
+      },
+      {
         source: "/jobs/view/:jobId",
         destination: "/dashboard/jobs/:jobId", // Rewrite to /dashboard/jobs/{jobId}
       },

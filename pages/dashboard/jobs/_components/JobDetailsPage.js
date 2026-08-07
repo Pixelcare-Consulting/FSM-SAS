@@ -2489,135 +2489,97 @@ const JobDetails = () => {
   // Function to send chat message — always via API so admin_id is set server-side for ADMIN
   const handleSendChatMessage = async () => {
     if (!newChatMessage.trim() || !jobId || isSendingMessage) return;
-    
+
     setIsSendingMessage(true);
-    const supabase = getSupabaseClient();
-    
-    if (!supabase) {
-      toast.error('Unable to connect to database');
-      setIsSendingMessage(false);
-      return;
-    }
-    
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller
+      ? setTimeout(() => controller.abort(), 25000)
+      : null;
+
     try {
       const userRole = Cookies.get('role') || 'ADMIN';
       const senderType = userRole === 'TECHNICIAN' ? 'TECHNICIAN' : 'ADMIN';
-      const technicianJobId = job?.assignedWorkers?.[0]?.technician_job_id ||
-                              job?.assignedWorkers?.[0]?.id || null;
+      const worker = job?.assignedWorkers?.[0];
+      const technicianJobId =
+        worker?.technician_job_id ||
+        worker?.id ||
+        null;
       const messageText = newChatMessage.trim();
       if (!messageText) {
         toast.error('Please enter a message');
-        setIsSendingMessage(false);
         return;
       }
 
-      const jobIdForApi = jobUuid || jobId;
+      const jobIdForApi = jobUuid || job?.id || jobId;
       if (!jobIdForApi) {
         toast.error('Job not loaded yet');
-        setIsSendingMessage(false);
         return;
       }
 
-      let data = null;
-      let error = null;
-      const response = await fetch(`/api/jobs/${jobIdForApi}/messages`, {
+      const response = await fetch(`/api/jobs/${encodeURIComponent(jobIdForApi)}/messages`, {
         method: 'POST',
-        credentials: 'include',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller?.signal,
         body: JSON.stringify({
           message: messageText,
           technician_job_id: technicianJobId,
-          sender_type: senderType
-        })
+          sender_type: senderType,
+        }),
       });
-      const result = await response.json();
-      if (!response.ok) {
-        error = { message: result.message || 'Failed to send message' };
-      } else if (result.success && result.data) {
-        data = result.data;
-      } else {
-        error = { message: result.message || 'No data returned' };
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success || !result.data) {
+        const errMsg =
+          result.message ||
+          (response.status === 400
+            ? 'Unable to send message for this job'
+            : `Failed to send message (${response.status || 'error'})`);
+        console.error('Error sending message:', result);
+        toast.error(errMsg);
+        return;
       }
 
-      if (error) {
-        console.error('Error sending message:', error);
-        toast.error(`Failed to send message: ${error.message}`);
-      } else {
-        console.log('Message sent successfully:', data);
-        setNewChatMessage('');
-        // Add message to local state immediately, but check for duplicates
-        if (data) {
-          // Enrich message with technician or admin name
-          let messageWithName = { ...data };
-          
-          // If this is a technician message, fetch technician name
-          if (data.technician_job_id && data.sender_type === 'TECHNICIAN') {
-            try {
-              const { data: technicianJob, error: techJobError } = await supabase
-                .from('technician_jobs')
-                .select(`
-                  id,
-                  technician_id,
-                  technician:technician_id(
-                    id,
-                    full_name
-                  )
-                `)
-                .eq('id', data.technician_job_id)
-                .single();
-              
-              if (!techJobError && technicianJob?.technician) {
-                messageWithName.technician_job = {
-                  technician_id: technicianJob.technician_id,
-                  technician: {
-                    id: technicianJob.technician.id,
-                    full_name: technicianJob.technician.full_name
-                  }
-                };
-              }
-            } catch (techError) {
-              console.warn('Error fetching technician name for new message:', techError);
-            }
-          }
-          
-          // If this is an admin message, use current logged-in user's name
-          if (data.sender_type === 'ADMIN' && data.job_id) {
-            // Use current user's full name (we just sent this message, so it's from us)
-            if (currentUserFullName) {
-              messageWithName.job = {
-                created_by_user: {
-                  id: currentUserId,
-                  admin_id: currentUserId,
-                  username: currentUserFullName,
-                  full_name: currentUserFullName
-                }
-              };
-            } else {
-              messageWithName.job = {
-                created_by_user: {
-                  id: data.admin_id || null,
-                  admin_id: data.admin_id || null,
-                  username: 'Admin',
-                  full_name: 'Admin'
-                }
-              };
-            }
-          }
-          
-          setChatMessages(prev => {
-            // Check if message already exists to prevent duplicates
-            const exists = prev.some(msg => msg.id === messageWithName.id);
-            if (exists) return prev;
-            return [...prev, messageWithName];
-          });
-        }
-        toast.success('Message sent!');
-        void queryClient.invalidateQueries(queryKeys.jobChat(jobIdForApi));
+      const data = result.data;
+      setNewChatMessage('');
+
+      let messageWithName = { ...data };
+      if (data.sender_type === 'ADMIN' && data.job_id) {
+        messageWithName.job = {
+          created_by_user: {
+            id: currentUserId || data.admin_id || null,
+            admin_id: currentUserId || data.admin_id || null,
+            username: currentUserFullName || 'Admin',
+            full_name: currentUserFullName || 'Admin',
+          },
+        };
+      } else if (data.sender_type === 'TECHNICIAN' && data.technician_job_id) {
+        const techName =
+          worker?.full_name ||
+          worker?.fullName ||
+          'Technician';
+        messageWithName.technician_job = {
+          technician_id: worker?.technician_id || worker?.workerId || null,
+          technician: {
+            id: worker?.technician_id || worker?.workerId || null,
+            full_name: techName,
+          },
+        };
       }
+
+      setChatMessages((prev) => {
+        const exists = prev.some((msg) => msg.id === messageWithName.id);
+        if (exists) return prev;
+        return [...prev, messageWithName];
+      });
+      toast.success('Message sent!');
+      void queryClient.invalidateQueries(queryKeys.jobChat(jobIdForApi));
     } catch (error) {
       console.error('Error sending message:', error);
-      toast.error('Failed to send message');
+      const aborted = error?.name === 'AbortError';
+      toast.error(aborted ? 'Sending timed out. Please try again.' : 'Failed to send message');
     } finally {
+      if (timeoutId) clearTimeout(timeoutId);
       setIsSendingMessage(false);
     }
   };
@@ -2747,6 +2709,16 @@ const JobDetails = () => {
                   <div ref={chatMessagesEndRef} />
                 </div>
               )}
+            </div>
+
+            <div className={styles.chatViewAllRow}>
+              <Link
+                href="/jobs/messages"
+                className={styles.chatViewAllLink}
+                onClick={() => setIsChatOpen(false)}
+              >
+                View All Messages
+              </Link>
             </div>
             
             <div className={styles.chatInputContainer}>

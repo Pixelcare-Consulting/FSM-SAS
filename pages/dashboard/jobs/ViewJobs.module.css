@@ -3057,8 +3057,29 @@ button.actionIcon:disabled {
   background: white;
 }
 
+.chatViewAllRow {
+  display: flex;
+  justify-content: center;
+  padding: 8px 12px 4px;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+}
+
+.chatViewAllLink {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4171F5;
+  text-decoration: none;
+}
+
+.chatViewAllLink:hover {
+  color: #2f5ad6;
+  text-decoration: underline;
+}
+
 .chatPopup.chatMinimized .chatMessagesContainer,
-.chatPopup.chatMinimized .chatInputContainer {
+.chatPopup.chatMinimized .chatInputContainer,
+.chatPopup.chatMinimized .chatViewAllRow {
   display: none;
 }
 

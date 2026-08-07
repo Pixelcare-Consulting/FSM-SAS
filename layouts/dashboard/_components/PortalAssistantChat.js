@@ -21,6 +21,7 @@ const JOBS_NON_DETAIL_SEGMENTS = new Set([
   'edit-jobs',
   'live-tracking',
   'migration',
+  'messages',
 ]);
 
 /**

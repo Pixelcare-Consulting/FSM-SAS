@@ -1,5 +1,5 @@
 // imports.js
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Row,
   Col,
@@ -28,6 +28,13 @@ import {
   fetchJobStatuses,
 } from "../../utils/jobStatusSettings";
 import { jobDisplayCustomerName } from "../../lib/utils/embeddedCustomerName";
+import {
+  escapeHtml,
+  getReleasePages,
+  getSidebarWhatsNewItems,
+  isWhatsNewHiddenToday,
+  markWhatsNewHiddenToday,
+} from "@/lib/releases/whatsNewFromReleases";
 // Constants
 const TIME_FILTERS = ["Today", "This Week", "This Month", "This Year"];
 /** Field Service Distribution / job-type fallback colors (Performance bars use Settings via getPerformanceOverviewBarColors). */
@@ -69,57 +76,31 @@ function distributionSliceLabel(rawStatus, jobStatusesList) {
   return getJobStatusLabelFromList(key, jobStatusesList) || `Status ${key}`;
 }
 
-/** Inline “What’s New” feed + SweetAlert modal share this list */
-const WHATS_NEW_ITEMS = [
-  {
-    icon: "🚀",
-    title: "Enhanced Dashboard 2.0",
-    description: "Experience our most powerful insights yet.",
-    tag: "New",
-    tagType: "new",
-    highlight: true,
-  },
-  {
-    icon: "🏢",
-    title: "Customer Sub-Locations",
-    description: "Search multiple locations per customer with enhanced hierarchy.",
-    tag: "New",
-    tagType: "new",
-    highlight: true,
-  },
-  {
-    icon: "🔍",
-    title: "Smart Global Search",
-    description: "Enhanced search with filters and real-time suggestions.",
-    tag: "Improved",
-    tagType: "improved",
-    highlight: false,
-  },
-  {
-    icon: "🔐",
-    title: "Advanced Authentication",
-    description: "Enhanced session management with security controls and auto-renewal.",
-    tag: "Improved",
-    tagType: "improved",
-    highlight: false,
-  },
-  {
-    icon: "✨",
-    title: "UI Refresh",
-    description: "Modern interface with improved accessibility and navigation.",
-    tag: "Improved",
-    tagType: "improved",
-    highlight: false,
-  },
-  {
-    icon: "⚡",
-    title: "Performance Boost",
-    description: "Faster page loads and smoother transitions.",
-    tag: "Improved",
-    tagType: "improved",
-    highlight: false,
-  },
-];
+const SIDEBAR_WHATS_NEW_ITEMS = getSidebarWhatsNewItems(6);
+
+function renderWhatsNewFeaturesHtml(items) {
+  return (items || [])
+    .map(
+      (item) => `
+              <div class="feature-item ${item.highlight ? "highlight" : ""}">
+                <div class="feature-icon">${escapeHtml(item.icon)}</div>
+                <div class="feature-content">
+                  <h4>${escapeHtml(item.title)}</h4>
+                  <p>${escapeHtml(item.description)}</p>
+                  <div class="feature-tags">
+                    <span class="tag ${escapeHtml(item.tagType)}">${escapeHtml(item.tag)}</span>
+                  </div>
+                </div>
+              </div>`
+    )
+    .join("");
+}
+
+function renderWhatsNewPagerLabel(page) {
+  if (!page) return "No releases yet";
+  const datePart = page.shortDate ? ` · ${escapeHtml(page.shortDate)}` : "";
+  return `v${escapeHtml(page.version)} — ${escapeHtml(page.title)}${datePart}`;
+}
 
 const FilterButtons = memo(({ currentFilter, onFilterChange }) => {
   return (
@@ -233,6 +214,7 @@ const Overview = () => {
   const [allFollowUps, setAllFollowUps] = useState([]);
   const [allCustomers, setAllCustomers] = useState([]);
   const [lastLoginTime, setLastLoginTime] = useState(null);
+  const whatsNewAutoOpenedRef = useRef(false);
 
   useEffect(() => {
     if (userDetails?.updated_at) {
@@ -793,6 +775,94 @@ const addWelcomeAlertStyles = (popup) => {
       color: white;
     }
 
+    .tag.fixed {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .feature-item.highlight .tag.fixed {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+    }
+
+    .whats-new-pager {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 12px;
+      margin-left: 32px;
+      flex-wrap: wrap;
+    }
+
+    .whats-new-pager-label {
+      font-size: 13px;
+      color: #334155;
+      font-weight: 500;
+      flex: 1;
+      min-width: 0;
+      line-height: 1.35;
+    }
+
+    .whats-new-pager-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .whats-new-pager-btn {
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: #334155;
+      border-radius: 8px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .whats-new-pager-btn:hover:not(:disabled) {
+      background: #f1f5f9;
+      border-color: #94a3b8;
+    }
+
+    .whats-new-pager-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .whats-new-pager-count {
+      font-size: 12px;
+      color: #64748b;
+      min-width: 48px;
+      text-align: center;
+    }
+
+    .whats-new-footer {
+      border-top: 1px solid #e5e7eb;
+      padding: 12px 20px;
+      background: #fff;
+      flex-shrink: 0;
+    }
+
+    .whats-new-hide-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      font-size: 13px;
+      color: #475569;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .whats-new-hide-label input {
+      margin: 0;
+      cursor: pointer;
+    }
+
     .close-button {
       position: absolute;
       top: 16px;
@@ -962,6 +1032,11 @@ const addWelcomeAlertStyles = (popup) => {
   animation: pulse 2s infinite;
 }
 
+.tag.fixed {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 @keyframes sparkle {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; transform: scale(1.05); }
@@ -974,7 +1049,8 @@ const addWelcomeAlertStyles = (popup) => {
 }
 
 .feature-item.highlight .tag.new,
-.feature-item.highlight .tag.improved {
+.feature-item.highlight .tag.improved,
+.feature-item.highlight .tag.fixed {
   background: rgba(255, 255, 255, 0.2);
   color: white;
 }
@@ -1164,35 +1240,14 @@ const displayName = useMemo(() => {
   );
 }, [userDetails]);
 
-const handleWhatsNewClick = () => {
-  const userName = displayName;
-  const userRole = userDetails?.role || "User";
-  const userAvatar = userDetails?.profilePicture || "/default-avatar.png";
-  const lastLogin = lastLoginTime
-    ? lastLoginTime.toLocaleString("en-US", {
-        weekday: "short",
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      })
-    : "First time login";
-
-  const whatsNewFeaturesHtml = WHATS_NEW_ITEMS.map(
-    (item) => `
-              <div class="feature-item ${item.highlight ? "highlight" : ""}">
-                <div class="feature-icon">${item.icon}</div>
-                <div class="feature-content">
-                  <h4>${item.title}</h4>
-                  <p>${item.description}</p>
-                  <div class="feature-tags">
-                    <span class="tag ${item.tagType}">${item.tag}</span>
-                  </div>
-                </div>
-              </div>`
-  ).join("");
+const handleWhatsNewClick = useCallback(() => {
+  const userName = escapeHtml(displayName);
+  const userRole = escapeHtml(userDetails?.role || "User");
+  const userAvatar = escapeHtml(userDetails?.profilePicture || "/default-avatar.png");
+  const pages = getReleasePages();
+  let currentIndex = 0;
+  const total = pages.length;
+  const initialPage = pages[currentIndex] || { version: "", title: "", shortDate: "", items: [] };
 
   Swal.fire({
     html: `
@@ -1241,12 +1296,26 @@ const handleWhatsNewClick = () => {
                 </h2>
               </div>
               <p class="subtitle">Discover our latest features and improvements</p>
+              <div class="whats-new-pager">
+                <div class="whats-new-pager-label" id="whats-new-pager-label">${renderWhatsNewPagerLabel(initialPage)}</div>
+                <div class="whats-new-pager-controls">
+                  <button type="button" class="whats-new-pager-btn" id="whats-new-prev" ${currentIndex <= 0 ? "disabled" : ""}>Prev</button>
+                  <span class="whats-new-pager-count" id="whats-new-pager-count">${total === 0 ? "0 / 0" : `1 / ${total}`}</span>
+                  <button type="button" class="whats-new-pager-btn" id="whats-new-next" ${currentIndex >= total - 1 || total === 0 ? "disabled" : ""}>Next</button>
+                </div>
+              </div>
             </div>
           </div>
           <div class="features-container">
-            <div class="features-grid">
-              ${whatsNewFeaturesHtml}
+            <div class="features-grid" id="whats-new-features-grid">
+              ${renderWhatsNewFeaturesHtml(initialPage.items)}
             </div>
+          </div>
+          <div class="whats-new-footer">
+            <label class="whats-new-hide-label" for="whats-new-hide-today">
+              <input type="checkbox" id="whats-new-hide-today" />
+              <span>Don't show for today</span>
+            </label>
           </div>
         </div>
       </div>
@@ -1259,9 +1328,65 @@ const handleWhatsNewClick = () => {
     },
     didRender: (popup) => {
       addWelcomeAlertStyles(popup);
+
+      const gridEl = popup.querySelector("#whats-new-features-grid");
+      const labelEl = popup.querySelector("#whats-new-pager-label");
+      const countEl = popup.querySelector("#whats-new-pager-count");
+      const prevBtn = popup.querySelector("#whats-new-prev");
+      const nextBtn = popup.querySelector("#whats-new-next");
+
+      const renderPage = (index) => {
+        currentIndex = index;
+        const page = pages[currentIndex] || { version: "", title: "", shortDate: "", items: [] };
+        if (gridEl) gridEl.innerHTML = renderWhatsNewFeaturesHtml(page.items);
+        if (labelEl) labelEl.innerHTML = renderWhatsNewPagerLabel(page);
+        if (countEl) {
+          countEl.textContent = total === 0 ? "0 / 0" : `${currentIndex + 1} / ${total}`;
+        }
+        if (prevBtn) prevBtn.disabled = currentIndex <= 0;
+        if (nextBtn) nextBtn.disabled = currentIndex >= total - 1 || total === 0;
+      };
+
+      if (prevBtn) {
+        prevBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (currentIndex > 0) renderPage(currentIndex - 1);
+        });
+      }
+      if (nextBtn) {
+        nextBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (currentIndex < total - 1) renderPage(currentIndex + 1);
+        });
+      }
+    },
+    willClose: () => {
+      const checkbox = document.getElementById("whats-new-hide-today");
+      if (checkbox?.checked) {
+        markWhatsNewHiddenToday();
+      }
     },
   });
-};
+}, [displayName, userDetails?.role, userDetails?.profilePicture, newJobsCount, activeJobsCount]);
+
+useEffect(() => {
+  if (isLoading || isOverviewLoading) return;
+  if (whatsNewAutoOpenedRef.current) return;
+  if (isWhatsNewHiddenToday()) {
+    whatsNewAutoOpenedRef.current = true;
+    return;
+  }
+
+  const timer = setTimeout(() => {
+    if (whatsNewAutoOpenedRef.current) return;
+    whatsNewAutoOpenedRef.current = true;
+    handleWhatsNewClick();
+  }, 400);
+
+  return () => clearTimeout(timer);
+}, [isLoading, isOverviewLoading, handleWhatsNewClick]);
 
 return (
   <div className="dashboard-wrapper" style={{ width: "100%", maxWidth: "100%" }}>
@@ -1755,12 +1880,12 @@ return (
               </Card.Header>
               <Card.Body className="p-0">
                 <div style={{ maxHeight: 300, overflowY: "auto" }}>
-                  {WHATS_NEW_ITEMS.map((item, i) => (
+                  {SIDEBAR_WHATS_NEW_ITEMS.map((item, i) => (
                     <div
-                      key={item.title}
+                      key={`${item.version}-${item.tagType}-${i}`}
                       className="px-4 py-3"
                       style={{
-                        borderBottom: i < WHATS_NEW_ITEMS.length - 1 ? "1px solid #f1f5f9" : "none",
+                        borderBottom: i < SIDEBAR_WHATS_NEW_ITEMS.length - 1 ? "1px solid #f1f5f9" : "none",
                         background: item.highlight ? "linear-gradient(90deg, #eff6ff 0%, #fff 12%)" : undefined,
                       }}
                     >
@@ -1771,7 +1896,11 @@ return (
                         <div className="flex-grow-1 min-w-0">
                           <div className="d-flex align-items-center gap-2 flex-wrap mb-1">
                             <span style={{ fontWeight: 600, fontSize: 14, color: "#1e293b" }}>{item.title}</span>
-                            <Badge bg={item.tagType === "new" ? "primary" : "secondary"} className="fw-normal" style={{ fontSize: 10 }}>
+                            <Badge
+                              bg={item.tagType === "new" ? "primary" : item.tagType === "fixed" ? "warning" : "secondary"}
+                              className="fw-normal"
+                              style={{ fontSize: 10 }}
+                            >
                               {item.tag}
                             </Badge>
                           </div>
