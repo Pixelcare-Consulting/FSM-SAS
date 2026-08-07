@@ -10,6 +10,15 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.15.24',
+    date: '2026-07-21',
+    title: 'Fix portal CP code collision with soft-deleted customers',
+    notes: [
+      'getNextPortalCardCode now takes max CP via ordered limit(1) and skips codes still occupied by soft-deleted rows (UNIQUE is not active-only).',
+      'Portal customer create and Google Form lead sync retry customer_code 23505 collisions up to 8 times so Add Customer / Convert to SAP no longer fail on recycled CP numbers.',
+    ],
+  },
+  {
     version: '3.15.23',
     date: '2026-07-20',
     title: 'Follow-up status: Completed + Open/OPEN dedupe',

@@ -89,6 +89,58 @@ function getLeadFieldUpdatesFromSync(leadData) {
   };
 }
 
+function isCustomerCodeDuplicateError(err) {
+  const msg = String(err?.message || '');
+  const details = err?.details != null ? String(err.details) : '';
+  return (
+    err?.code === '23505' &&
+    (msg.includes('customer_code') ||
+      msg.includes('customer_customer_code_key') ||
+      details.includes('customer_code'))
+  );
+}
+
+/**
+ * Allocate next CP and create portal customer; retry on customer_code unique collisions.
+ * Soft-deleted codes still occupy UNIQUE — generator + retries skip them.
+ */
+async function createPortalCustomerForLead({ supabase, leadId, leadData, maxAttempts = 8 }) {
+  const customerName = leadData.full_name || leadData.email || 'Unknown';
+  const customerAddress = getCustomerAddressFromLead(leadData);
+  let lastErr = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const customerCode = await customerService.getNextPortalCardCode(supabase);
+    const customerRecord = {
+      customer_code: customerCode,
+      customer_name: customerName,
+      customer_address: customerAddress,
+      phone_number: leadData.handphone || null,
+      email: leadData.email || null,
+      source: 'portal',
+      lead_id: leadId,
+    };
+    if (leadData.block != null) customerRecord.block = leadData.block;
+    if (leadData.unit != null) customerRecord.unit = leadData.unit;
+
+    try {
+      const customer = await customerService.create(customerRecord, supabase);
+      return { customer, customerCode };
+    } catch (err) {
+      lastErr = err;
+      if (isCustomerCodeDuplicateError(err)) {
+        console.warn(
+          `leads/sync: customer_code collision on ${customerCode}, retry ${attempt + 1}/${maxAttempts}`
+        );
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastErr || new Error('Could not allocate portal customer code');
+}
+
 function normalizeSyncValue(value) {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'boolean') return value;
@@ -595,21 +647,11 @@ export default async function handler(req, res) {
           const lead = await leadService.create(leadData);
           created++;
           // 2. Assign next CP and create portal customer so lead has customer_code immediately
-          const customerCode = await customerService.getNextPortalCardCode(supabase);
-          const customerName = leadData.full_name || leadData.email || 'Unknown';
-          const customerAddress = getCustomerAddressFromLead(leadData);
-          const customerRecord = {
-            customer_code: customerCode,
-            customer_name: customerName,
-            customer_address: customerAddress,
-            phone_number: leadData.handphone || null,
-            email: leadData.email || null,
-            source: 'portal',
-            lead_id: lead.id
-          };
-          if (leadData.block != null) customerRecord.block = leadData.block;
-          if (leadData.unit != null) customerRecord.unit = leadData.unit;
-          const customer = await customerService.create(customerRecord, supabase);
+          const { customer, customerCode } = await createPortalCustomerForLead({
+            supabase,
+            leadId: lead.id,
+            leadData,
+          });
           await leadService.update(lead.id, { customer_id: customer.id });
           await ensurePortalCustomerAddressFromLead({
             supabase,
@@ -641,22 +683,12 @@ export default async function handler(req, res) {
                 let logMsg = `   ↻ Restored ${leadData.email} (merged latest data from Google)`;
                 let restoredCustomerCode = null;
                 if (!existing.customer_id) {
-                  const customerCode = await customerService.getNextPortalCardCode(supabase);
+                  const { customer, customerCode } = await createPortalCustomerForLead({
+                    supabase,
+                    leadId: existing.id,
+                    leadData,
+                  });
                   restoredCustomerCode = customerCode;
-                  const customerName = leadData.full_name || leadData.email || 'Unknown';
-                  const customerAddress = getCustomerAddressFromLead(leadData);
-                  const customerRecord = {
-                    customer_code: customerCode,
-                    customer_name: customerName,
-                    customer_address: customerAddress,
-                    phone_number: leadData.handphone || null,
-                    email: leadData.email || null,
-                    source: 'portal',
-                    lead_id: existing.id
-                  };
-                  if (leadData.block != null) customerRecord.block = leadData.block;
-                  if (leadData.unit != null) customerRecord.unit = leadData.unit;
-                  const customer = await customerService.create(customerRecord, supabase);
                   await leadService.update(existing.id, { customer_id: customer.id });
                   await ensurePortalCustomerAddressFromLead({
                     supabase,

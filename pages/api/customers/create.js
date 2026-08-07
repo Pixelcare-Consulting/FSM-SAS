@@ -171,20 +171,6 @@ export default async function handler(req, res) {
     });
   }
 
-  let customerCode;
-  try {
-    customerCode = await getNextPortalCardCode(supabase);
-  } catch (err) {
-    console.error('Get next portal card code error:', err);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to generate customer code',
-      message: err.message || 'Please try again.',
-    });
-  }
-
-  const customerData = mapCreatePayloadToCustomerFields(sapPayload, customerCode);
-
   async function finalizeCreate(created) {
     try {
       await ensurePortalCustomerFromCreatePayload({
@@ -217,30 +203,53 @@ export default async function handler(req, res) {
     });
   }
 
-  try {
-    const created = await customerService.create(customerData, supabase);
-    return finalizeCreate(created);
-  } catch (err) {
-    if (err.code === '23505') {
-      try {
-        customerCode = await getNextPortalCardCode(supabase);
-        const retryData = mapCreatePayloadToCustomerFields(sapPayload, customerCode);
-        const created = await customerService.create(retryData, supabase);
-        return finalizeCreate(created);
-      } catch (retryErr) {
-        console.error('Create customer (portal) retry error:', retryErr);
-        return res.status(500).json({
-          success: false,
-          error: 'Failed to create customer',
-          message: retryErr.message || 'Please try again.',
-        });
-      }
+  // Defense-in-depth: regenerate CP and retry on unique collisions (same pattern as AIFM placeholders).
+  const MAX_CP_INSERT_ATTEMPTS = 8;
+  let lastErr = null;
+  for (let attempt = 0; attempt < MAX_CP_INSERT_ATTEMPTS; attempt += 1) {
+    let customerCode;
+    try {
+      customerCode = await getNextPortalCardCode(supabase);
+    } catch (err) {
+      console.error('Get next portal card code error:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to generate customer code',
+        message: err.message || 'Please try again.',
+      });
     }
-    console.error('Create customer (portal) error:', err);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to create customer',
-      message: err.message || 'Please try again.',
-    });
+
+    try {
+      const customerData = mapCreatePayloadToCustomerFields(sapPayload, customerCode);
+      const created = await customerService.create(customerData, supabase);
+      return finalizeCreate(created);
+    } catch (err) {
+      lastErr = err;
+      const msg = String(err?.message || '');
+      const isCodeDup =
+        err?.code === '23505' &&
+        (msg.includes('customer_code') ||
+          msg.includes('customer_customer_code_key') ||
+          (err?.details && String(err.details).includes('customer_code')));
+      if (isCodeDup) {
+        console.warn(
+          `Create customer (portal): customer_code collision on ${customerCode}, retry ${attempt + 1}/${MAX_CP_INSERT_ATTEMPTS}`
+        );
+        continue;
+      }
+      console.error('Create customer (portal) error:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to create customer',
+        message: err.message || 'Please try again.',
+      });
+    }
   }
+
+  console.error('Create customer (portal) exhausted CP retries:', lastErr);
+  return res.status(500).json({
+    success: false,
+    error: 'Failed to create customer',
+    message: lastErr?.message || 'Please try again.',
+  });
 }
