@@ -23,6 +23,7 @@ import {
   FaInfoCircle,
   FaChevronDown,
   FaChevronUp,
+  FaArchive,
 } from 'react-icons/fa';
 import { GeeksSEO } from 'widgets';
 import { DashboardHeader } from 'sub-components';
@@ -503,6 +504,12 @@ const AuditLogsPage = () => {
   const [showDetail, setShowDetail] = useState(false);
   const [showTechnical, setShowTechnical] = useState(false);
   const [jobStatusesList, setJobStatusesList] = useState(() => readCachedJobStatuses() || []);
+  const [showArchive, setShowArchive] = useState(false);
+  const [archiveBefore, setArchiveBefore] = useState(null);
+  const [archivePreview, setArchivePreview] = useState(null);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archiveError, setArchiveError] = useState(null);
+  const [archiveSuccess, setArchiveSuccess] = useState(null);
   const itemsPerPage = 25;
 
   const [filters, setFilters] = useState({
@@ -577,6 +584,97 @@ const AuditLogsPage = () => {
     }
   };
 
+  const resetArchiveModal = () => {
+    setArchiveBefore(null);
+    setArchivePreview(null);
+    setArchiveError(null);
+    setArchiveSuccess(null);
+    setArchiveLoading(false);
+  };
+
+  const openArchiveModal = () => {
+    resetArchiveModal();
+    setShowArchive(true);
+  };
+
+  const closeArchiveModal = () => {
+    if (archiveLoading) return;
+    setShowArchive(false);
+    resetArchiveModal();
+  };
+
+  const toArchiveBeforeIso = (dateVal) => {
+    if (!dateVal) return null;
+    const d = dateVal instanceof Date ? dateVal : new Date(dateVal);
+    if (Number.isNaN(d.getTime())) return null;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const handleArchivePreview = async () => {
+    const before = toArchiveBeforeIso(archiveBefore);
+    if (!before) {
+      setArchiveError('Choose a cutoff date first');
+      return;
+    }
+    setArchiveLoading(true);
+    setArchiveError(null);
+    setArchiveSuccess(null);
+    setArchivePreview(null);
+    try {
+      const res = await fetch('/api/audit-logs/archive', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'preview', before }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Failed to preview archive');
+      }
+      setArchivePreview(json);
+    } catch (err) {
+      console.error(err);
+      setArchiveError(err?.message || 'Failed to preview archive');
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
+  const handleArchiveConfirm = async () => {
+    const before = archivePreview?.before || toArchiveBeforeIso(archiveBefore);
+    if (!before || !archivePreview || archivePreview.toDelete <= 0) return;
+    setArchiveLoading(true);
+    setArchiveError(null);
+    setArchiveSuccess(null);
+    try {
+      const res = await fetch('/api/audit-logs/archive', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'delete', before }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Failed to archive logs');
+      }
+      setArchiveSuccess(
+        `Deleted ${Number(json.deleted || 0).toLocaleString()} log(s). ${Number(
+          json.toKeep || 0
+        ).toLocaleString()} kept.`
+      );
+      setArchivePreview(null);
+      await refetchAuditLogs();
+    } catch (err) {
+      console.error(err);
+      setArchiveError(err?.message || 'Failed to archive logs');
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
   return (
     <>
       <GeeksSEO title="Audit Logs | SAS M&E - SAP B1 | Portal" />
@@ -588,15 +686,26 @@ const AuditLogsPage = () => {
           { label: 'Audit Logs' },
         ]}
         rightAction={
-          <Button
-            variant="light"
-            size="sm"
-            onClick={() => refetchAuditLogs()}
-            disabled={loading}
-            className="d-flex align-items-center gap-2"
-          >
-            <FaSync className={loading ? 'fa-spin' : ''} /> Refresh
-          </Button>
+          <div className="d-flex align-items-center gap-2">
+            <Button
+              variant="outline-light"
+              size="sm"
+              onClick={openArchiveModal}
+              disabled={loading}
+              className="d-flex align-items-center gap-2"
+            >
+              <FaArchive /> Archive
+            </Button>
+            <Button
+              variant="light"
+              size="sm"
+              onClick={() => refetchAuditLogs()}
+              disabled={loading}
+              className="d-flex align-items-center gap-2"
+            >
+              <FaSync className={loading ? 'fa-spin' : ''} /> Refresh
+            </Button>
+          </div>
         }
       />
 
@@ -938,6 +1047,99 @@ const AuditLogsPage = () => {
         <Modal.Footer className="border-top-0 pt-0">
           <Button variant="secondary" onClick={() => setShowDetail(false)}>
             Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={showArchive} onHide={closeArchiveModal} centered>
+        <Modal.Header closeButton={!archiveLoading} className="border-bottom-0 pb-0">
+          <Modal.Title className="fw-semibold" style={{ fontSize: 18 }}>
+            Archive audit logs
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted small mb-3">
+            Permanently delete logs older than the date you choose. Newer entries stay in
+            the activity trail. This cannot be undone.
+          </p>
+
+          <Form.Label className="small text-muted fw-semibold">
+            Delete everything before
+          </Form.Label>
+          <Flatpickr
+            className="form-control"
+            value={archiveBefore || ''}
+            options={{
+              dateFormat: 'Y-m-d',
+              maxDate: new Date(Date.now() - 24 * 60 * 60 * 1000),
+              allowInput: true,
+            }}
+            onChange={(dates) => {
+              setArchiveBefore(dates?.[0] || null);
+              setArchivePreview(null);
+              setArchiveError(null);
+              setArchiveSuccess(null);
+            }}
+            disabled={archiveLoading}
+          />
+
+          {archivePreview && (
+            <div
+              className="mt-3 p-3 rounded"
+              style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}
+            >
+              <div className="fw-semibold mb-1" style={{ fontSize: 14, color: '#1e293b' }}>
+                Preview
+              </div>
+              <div className="small text-muted">
+                <div>
+                  Will delete:{' '}
+                  <span className="fw-semibold text-danger">
+                    {Number(archivePreview.toDelete || 0).toLocaleString()}
+                  </span>
+                </div>
+                <div>
+                  Will keep:{' '}
+                  <span className="fw-semibold text-success">
+                    {Number(archivePreview.toKeep || 0).toLocaleString()}
+                  </span>
+                </div>
+                <div className="mt-1">
+                  Cutoff: {formatTs(archivePreview.before)}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {archiveError && (
+            <div className="alert alert-danger mt-3 mb-0 py-2 small">{archiveError}</div>
+          )}
+          {archiveSuccess && (
+            <div className="alert alert-success mt-3 mb-0 py-2 small">{archiveSuccess}</div>
+          )}
+        </Modal.Body>
+        <Modal.Footer className="border-top-0 pt-0">
+          <Button variant="secondary" onClick={closeArchiveModal} disabled={archiveLoading}>
+            {archiveSuccess ? 'Done' : 'Cancel'}
+          </Button>
+          <Button
+            variant="outline-primary"
+            onClick={handleArchivePreview}
+            disabled={archiveLoading || !archiveBefore}
+          >
+            {archiveLoading && !archivePreview ? 'Checking…' : 'Check count'}
+          </Button>
+          <Button
+            variant="danger"
+            onClick={handleArchiveConfirm}
+            disabled={
+              archiveLoading ||
+              !archivePreview ||
+              !(archivePreview.toDelete > 0) ||
+              Boolean(archiveSuccess)
+            }
+          >
+            {archiveLoading && archivePreview ? 'Archiving…' : 'Confirm delete'}
           </Button>
         </Modal.Footer>
       </Modal>

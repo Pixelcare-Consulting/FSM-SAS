@@ -130,6 +130,24 @@ function formatLinkMatchLabel(match) {
 
 const ACTION_BTN_STYLE = { fontSize: '11px', padding: '4px 8px' };
 
+function formatLeadDate(dateString) {
+  if (!dateString || dateString === '-') return '-';
+  try {
+    return format(new Date(dateString), 'MMM d, yyyy');
+  } catch {
+    return dateString;
+  }
+}
+
+function formatLeadDateTime(dateString) {
+  if (!dateString || dateString === '-') return '-';
+  try {
+    return format(new Date(dateString), 'MMM d, yyyy h:mm a');
+  } catch {
+    return dateString;
+  }
+}
+
 function getRowWorkflowStatus(row) {
   return row?.status || 'PENDING';
 }
@@ -839,23 +857,8 @@ const CustomerLeadsPage = () => {
 
   // Handle search input change — draft only; applied on Enter via hook
 
-  const formatDate = (dateString) => {
-    if (!dateString || dateString === '-') return '-';
-    try {
-      return format(new Date(dateString), 'MMM d, yyyy');
-    } catch {
-      return dateString;
-    }
-  };
-
-  const formatDateTime = (dateString) => {
-    if (!dateString || dateString === '-') return '-';
-    try {
-      return format(new Date(dateString), 'MMM d, yyyy h:mm a');
-    } catch {
-      return dateString;
-    }
-  };
+  const formatDate = formatLeadDate;
+  const formatDateTime = formatLeadDateTime;
 
   // Filter responses by status - pending services (first service date in the future). Only leads have service dates.
   const pendingResponses = responses.filter(r => {
@@ -1435,6 +1438,20 @@ const CustomerLeadsPage = () => {
       }
     }),
     leadsColumnHelper.display({
+      id: 'dateAdded',
+      header: 'Date Added',
+      cell: ({ row }) => {
+        const r = row.original;
+        const dateAdded = r.timestamp || r.created_at || null;
+        return (
+          <div className="d-flex align-items-center gap-1" style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
+            <Calendar size={12} className="text-muted flex-shrink-0" />
+            <span>{formatLeadDateTime(dateAdded)}</span>
+          </div>
+        );
+      }
+    }),
+    leadsColumnHelper.display({
       id: 'actions',
       header: 'Actions',
       cell: ({ row }) => {
@@ -1596,7 +1613,7 @@ const CustomerLeadsPage = () => {
 
   const exportToCSV = () => {
     const headers = [
-      'Timestamp', 'Email', 'Block', 'Unit', 'Address', 'Salutation', 'Full Name',
+      'Date Added', 'Email', 'Block', 'Unit', 'Address', 'Salutation', 'Full Name',
       'Handphone', 'First Service Date', 'Second Service Date',
       'Third Service Date', 'Fourth Service Date', 'Time Slot',
       'Agreed to Terms', 'Personal Info Consent'
@@ -1784,10 +1801,16 @@ const CustomerLeadsPage = () => {
                       <Phone size={12} className="text-muted" />
                       <small className="text-muted" style={{ fontSize: '12px' }}>{response.handphone}</small>
                     </div>
-                    <div className="d-flex align-items-center gap-2">
+                    <div className="d-flex align-items-center gap-2 mb-1">
                       <MapPin size={12} className="text-muted" />
                       <small className="text-muted" style={{ fontSize: '12px' }}>
                         {addressDisplay}
+                      </small>
+                    </div>
+                    <div className="d-flex align-items-center gap-2">
+                      <Calendar size={12} className="text-muted" />
+                      <small className="text-muted" style={{ fontSize: '12px' }}>
+                        {formatLeadDateTime(response.timestamp || response.created_at)}
                       </small>
                     </div>
                   </div>

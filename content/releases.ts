@@ -10,6 +10,31 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.16.4',
+    date: '2026-08-07',
+    title: 'Archive audit log history',
+    notes: [
+      'feature: Audit Logs has an Archive action — pick a cutoff date, preview how many entries will be removed, then permanently clear older history.',
+    ],
+  },
+  {
+    version: '3.16.3',
+    date: '2026-08-07',
+    title: 'Portal Customers Date Added',
+    notes: [
+      'improvement: Portal Customers shows newest leads first and includes a Date Added column so recent sign-ups are easy to find.',
+    ],
+  },
+  {
+    version: '3.16.2',
+    date: '2026-08-07',
+    title: 'Forms Report export + paging',
+    notes: [
+      'fix: Forms Report Export downloads a CSV of the current filtered field activity list.',
+      'improvement: Field activity table now pages (25 / 50 / 100 rows) so long lists are easier to browse.',
+    ],
+  },
+  {
     version: '3.16.1',
     date: '2026-08-07',
     title: 'Live job tracking layout polish',

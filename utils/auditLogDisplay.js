@@ -50,6 +50,7 @@ const ACTION_LABELS = {
   JOB_MESSAGE_CREATE: 'Job message sent',
   AIFM_ASSIGN_CUSTOMERS: 'AIFM customer assignment',
   AIFM_SYNC_ADDRESS: 'AIFM address sync',
+  AUDIT_LOGS_ARCHIVE: 'Audit logs archived',
 };
 
 const SOURCE_LABELS = {

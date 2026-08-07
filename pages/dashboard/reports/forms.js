@@ -1,10 +1,47 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Row, Col, Card, Button, Form, Table, Badge, Spinner, Alert } from "react-bootstrap";
+import {
+  Row,
+  Col,
+  Card,
+  Button,
+  Form,
+  Table,
+  Badge,
+  Spinner,
+  Alert,
+  Pagination,
+} from "react-bootstrap";
 import ReportPageShell from "./_components/ReportPageShell";
 import { FaDownload, FaFilter } from "react-icons/fa";
 import Flatpickr from "react-flatpickr";
 import "flatpickr/dist/themes/light.css";
 import { format, startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
+import toast from "react-hot-toast";
+
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
+
+function escapeCsvCell(value) {
+  const s = value == null ? "" : String(value);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+/** UTF-8 BOM helps Excel open special characters correctly */
+function downloadCsv(filename, lines) {
+  const bom = "\uFEFF";
+  const blob = new Blob([bom + lines.join("\n")], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 const FormsReportPage = () => {
   const [dateRange, setDateRange] = useState([]);
@@ -15,6 +52,8 @@ const FormsReportPage = () => {
   const [googleForms, setGoogleForms] = useState([]);
   const [signatureRows, setSignatureRows] = useState([]);
   const [mediaRows, setMediaRows] = useState([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -30,11 +69,13 @@ const FormsReportPage = () => {
 
       const response = await fetch(`/api/reports/forms?${params.toString()}`);
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || `Failed to load forms data (${response.status})`);
+      if (!response.ok)
+        throw new Error(body.error || `Failed to load forms data (${response.status})`);
 
       setGoogleForms(body.googleForms || []);
       setSignatureRows(body.signatureRows || []);
       setMediaRows(body.mediaRows || []);
+      setPage(1);
     } catch (e) {
       setError(e?.message || "Failed to load forms data");
     } finally {
@@ -43,7 +84,10 @@ const FormsReportPage = () => {
   }, [dateRange, formType, techFilter]);
 
   useEffect(() => {
-    load();
+    const timer = setTimeout(() => {
+      load();
+    }, 100);
+    return () => clearTimeout(timer);
   }, [load]);
 
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
@@ -76,20 +120,92 @@ const FormsReportPage = () => {
   const totalSubmissions = signatureRows.length + mediaRows.length;
   const thisWeekCount = useMemo(() => {
     const sigN = signatureRows.filter((r) =>
-      r.signed_at ? isWithinInterval(new Date(r.signed_at), { start: weekStart, end: weekEnd }) : false
+      r.signed_at
+        ? isWithinInterval(new Date(r.signed_at), { start: weekStart, end: weekEnd })
+        : false
     ).length;
     const medN = mediaRows.filter((r) =>
-      r.created_at ? isWithinInterval(new Date(r.created_at), { start: weekStart, end: weekEnd }) : false
+      r.created_at
+        ? isWithinInterval(new Date(r.created_at), { start: weekStart, end: weekEnd })
+        : false
     ).length;
     return sigN + medN;
   }, [signatureRows, mediaRows, weekStart, weekEnd]);
+
+  const totalPages = Math.max(1, Math.ceil(mergedRows.length / pageSize) || 1);
+  const safePage = Math.min(page, totalPages);
+
+  const pagedRows = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return mergedRows.slice(start, start + pageSize);
+  }, [mergedRows, safePage, pageSize]);
+
+  const rangeLabel = useMemo(() => {
+    if (!mergedRows.length) return "0 of 0";
+    const start = (safePage - 1) * pageSize + 1;
+    const end = Math.min(safePage * pageSize, mergedRows.length);
+    return `${start}–${end} of ${mergedRows.length}`;
+  }, [mergedRows.length, safePage, pageSize]);
+
+  const handleExportCsv = useCallback(() => {
+    if (!mergedRows.length) {
+      toast.error("Nothing to export yet — load activity first.");
+      return;
+    }
+    const headers = [
+      "Date",
+      "Type",
+      "Job #",
+      "Customer",
+      "Technician",
+      "Detail",
+      "Status",
+    ];
+    const csvLines = [
+      headers.map(escapeCsvCell).join(","),
+      ...mergedRows.map((r) =>
+        [
+          r.at ? format(new Date(r.at), "yyyy-MM-dd HH:mm") : "",
+          r.kind,
+          r.jobNumber,
+          r.customerName,
+          r.technicianName,
+          r.detail,
+          r.status,
+        ]
+          .map(escapeCsvCell)
+          .join(",")
+      ),
+    ];
+    const stamp = format(new Date(), "yyyy-MM-dd");
+    downloadCsv(`forms-report_${stamp}.csv`, csvLines);
+    toast.success(`Exported ${mergedRows.length} row${mergedRows.length === 1 ? "" : "s"}`);
+  }, [mergedRows]);
+
+  const canExport = !loading && mergedRows.length > 0;
+
+  const goToPage = (next) => {
+    setPage(Math.min(Math.max(1, next), totalPages));
+  };
 
   return (
     <ReportPageShell
       title="Forms Report"
       subtitle="Google Form definitions, customer sign-offs, and job media from Supabase"
       headerRight={
-        <Button size="sm" variant="light" className="d-flex align-items-center gap-2" style={{ fontSize: 13, borderRadius: 8 }}>
+        <Button
+          size="sm"
+          variant="light"
+          className="d-flex align-items-center gap-2"
+          style={{ fontSize: 13, borderRadius: 8 }}
+          onClick={handleExportCsv}
+          disabled={!canExport}
+          title={
+            canExport
+              ? "Download CSV of the current filtered activity list"
+              : "Load activity first, then export"
+          }
+        >
           <FaDownload style={{ fontSize: 12 }} />
           Export
         </Button>
@@ -120,7 +236,10 @@ const FormsReportPage = () => {
               size="sm"
               style={{ maxWidth: 200, fontSize: 13, borderRadius: 8 }}
               value={formType}
-              onChange={(e) => setFormType(e.target.value)}
+              onChange={(e) => {
+                setFormType(e.target.value);
+                setPage(1);
+              }}
             >
               <option value="">All activity types</option>
               <option value="signoff">Customer sign-offs only</option>
@@ -130,10 +249,19 @@ const FormsReportPage = () => {
               size="sm"
               placeholder="Technician name…"
               value={techFilter}
-              onChange={(e) => setTechFilter(e.target.value)}
+              onChange={(e) => {
+                setTechFilter(e.target.value);
+                setPage(1);
+              }}
               style={{ maxWidth: 180, fontSize: 13, borderRadius: 8 }}
             />
-            <Button size="sm" variant="outline-primary" style={{ borderRadius: 8, fontSize: 13 }} onClick={load} disabled={loading}>
+            <Button
+              size="sm"
+              variant="outline-primary"
+              style={{ borderRadius: 8, fontSize: 13 }}
+              onClick={load}
+              disabled={loading}
+            >
               Refresh
             </Button>
           </div>
@@ -161,7 +289,9 @@ const FormsReportPage = () => {
                 >
                   {c.label}
                 </p>
-                <h3 style={{ fontWeight: 700, color: c.color, margin: 0, fontSize: 26 }}>{c.value}</h3>
+                <h3 style={{ fontWeight: 700, color: c.color, margin: 0, fontSize: 26 }}>
+                  {c.value}
+                </h3>
               </Card.Body>
             </Card>
           </Col>
@@ -170,7 +300,10 @@ const FormsReportPage = () => {
 
       {googleForms.length > 0 && (
         <Card className="mb-4" style={{ borderRadius: 12, border: "1px solid #e2e8f0" }}>
-          <Card.Header className="bg-white py-3 px-4" style={{ borderBottom: "1px solid #e2e8f0" }}>
+          <Card.Header
+            className="bg-white py-3 px-4"
+            style={{ borderBottom: "1px solid #e2e8f0" }}
+          >
             <h6 style={{ fontWeight: 700, margin: 0, color: "#1e293b" }}>Active Google Forms</h6>
           </Card.Header>
           <Card.Body className="py-2 px-3">
@@ -180,7 +313,11 @@ const FormsReportPage = () => {
                   <a href={g.url} target="_blank" rel="noopener noreferrer">
                     {g.name}
                   </a>
-                  {!g.is_active ? <Badge bg="secondary" className="ms-2">Inactive</Badge> : null}
+                  {!g.is_active ? (
+                    <Badge bg="secondary" className="ms-2">
+                      Inactive
+                    </Badge>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -189,33 +326,62 @@ const FormsReportPage = () => {
       )}
 
       <Card style={{ borderRadius: 12, border: "1px solid #e2e8f0" }}>
-        <Card.Header className="bg-white py-3 px-4" style={{ borderBottom: "1px solid #e2e8f0", borderRadius: "12px 12px 0 0" }}>
-          <h6 style={{ fontWeight: 700, margin: 0, color: "#1e293b" }}>Field activity (sign-offs & files)</h6>
+        <Card.Header
+          className="bg-white py-3 px-4 d-flex align-items-center justify-content-between flex-wrap gap-2"
+          style={{ borderBottom: "1px solid #e2e8f0", borderRadius: "12px 12px 0 0" }}
+        >
+          <h6 style={{ fontWeight: 700, margin: 0, color: "#1e293b" }}>
+            Field activity (sign-offs & files)
+          </h6>
+          {!loading && mergedRows.length > 0 && (
+            <span style={{ fontSize: 12, color: "#64748b" }}>Showing {rangeLabel}</span>
+          )}
         </Card.Header>
         <Card.Body className="p-0">
           <div className="table-responsive">
             <Table hover className="mb-0" style={{ fontSize: 13 }}>
               <thead style={{ background: "#f8fafc" }}>
                 <tr>
-                  <th className="px-4 py-3" style={{ fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0" }}>
+                  <th
+                    className="px-4 py-3"
+                    style={{ fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0" }}
+                  >
                     Date
                   </th>
-                  <th className="py-3" style={{ fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0" }}>
+                  <th
+                    className="py-3"
+                    style={{ fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0" }}
+                  >
                     Type
                   </th>
-                  <th className="py-3" style={{ fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0" }}>
+                  <th
+                    className="py-3"
+                    style={{ fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0" }}
+                  >
                     Job #
                   </th>
-                  <th className="py-3" style={{ fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0" }}>
+                  <th
+                    className="py-3"
+                    style={{ fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0" }}
+                  >
                     Customer
                   </th>
-                  <th className="py-3" style={{ fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0" }}>
+                  <th
+                    className="py-3"
+                    style={{ fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0" }}
+                  >
                     Technician
                   </th>
-                  <th className="py-3" style={{ fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0" }}>
+                  <th
+                    className="py-3"
+                    style={{ fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0" }}
+                  >
                     Detail
                   </th>
-                  <th className="py-3" style={{ fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0" }}>
+                  <th
+                    className="py-3"
+                    style={{ fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0" }}
+                  >
                     Status
                   </th>
                 </tr>
@@ -230,14 +396,20 @@ const FormsReportPage = () => {
                   </tr>
                 ) : mergedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-5 text-center" style={{ color: "#94a3b8", fontSize: 14 }}>
+                    <td
+                      colSpan={7}
+                      className="px-4 py-5 text-center"
+                      style={{ color: "#94a3b8", fontSize: 14 }}
+                    >
                       No sign-offs or media found (or none match filters).
                     </td>
                   </tr>
                 ) : (
-                  mergedRows.map((r) => (
+                  pagedRows.map((r) => (
                     <tr key={r.key}>
-                      <td className="px-4 py-2">{r.at ? format(new Date(r.at), "MMM d, yyyy HH:mm") : "—"}</td>
+                      <td className="px-4 py-2">
+                        {r.at ? format(new Date(r.at), "MMM d, yyyy HH:mm") : "—"}
+                      </td>
                       <td>{r.kind}</td>
                       <td>{r.jobNumber}</td>
                       <td>{r.customerName}</td>
@@ -257,6 +429,59 @@ const FormsReportPage = () => {
             </Table>
           </div>
         </Card.Body>
+        {!loading && mergedRows.length > 0 && (
+          <Card.Footer
+            className="bg-white d-flex align-items-center justify-content-between flex-wrap gap-3 py-3 px-4"
+            style={{ borderTop: "1px solid #e2e8f0", borderRadius: "0 0 12px 12px" }}
+          >
+            <div className="d-flex align-items-center gap-2" style={{ fontSize: 13 }}>
+              <span style={{ color: "#64748b" }}>Rows per page</span>
+              <Form.Select
+                size="sm"
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value) || 25);
+                  setPage(1);
+                }}
+                style={{ width: 88, borderRadius: 8, fontSize: 13 }}
+                aria-label="Rows per page"
+              >
+                {PAGE_SIZE_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </Form.Select>
+            </div>
+            <div className="d-flex align-items-center gap-3 flex-wrap">
+              <span style={{ fontSize: 13, color: "#64748b" }}>
+                Page {safePage} of {totalPages}
+              </span>
+              <Pagination className="mb-0" size="sm">
+                <Pagination.First
+                  disabled={safePage <= 1}
+                  onClick={() => goToPage(1)}
+                  aria-label="First page"
+                />
+                <Pagination.Prev
+                  disabled={safePage <= 1}
+                  onClick={() => goToPage(safePage - 1)}
+                  aria-label="Previous page"
+                />
+                <Pagination.Next
+                  disabled={safePage >= totalPages}
+                  onClick={() => goToPage(safePage + 1)}
+                  aria-label="Next page"
+                />
+                <Pagination.Last
+                  disabled={safePage >= totalPages}
+                  onClick={() => goToPage(totalPages)}
+                  aria-label="Last page"
+                />
+              </Pagination>
+            </div>
+          </Card.Footer>
+        )}
       </Card>
     </ReportPageShell>
   );
