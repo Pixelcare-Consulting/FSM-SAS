@@ -280,7 +280,7 @@
 
 .messageRowMid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 3.4rem 3.9rem;
+  grid-template-columns: 3.4rem minmax(0, 1fr) 3.9rem;
   align-items: center;
   column-gap: 0.45rem;
   min-width: 0;

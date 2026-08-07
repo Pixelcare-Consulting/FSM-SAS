@@ -109,8 +109,8 @@ const JobMessagesListPane = ({
                         <span className={styles.messageTime}>{formatShortTs(row.createdAt)}</span>
                       </span>
                       <span className={styles.messageRowMid}>
-                        <span className={styles.senderName}>{row.senderName}</span>
                         <span className={styles.roleChip}>{senderBadge(row.senderType)}</span>
+                        <span className={styles.senderName}>{row.senderName}</span>
                         <span className={styles.msgCountChip}>
                           {row.messageCount > 1
                             ? `${row.messageCount} msgs`
