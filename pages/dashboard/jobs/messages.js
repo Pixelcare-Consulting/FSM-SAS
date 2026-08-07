@@ -15,7 +15,7 @@ import {
 import JobMessagesFilterRail from './_components/jobMessages/JobMessagesFilterRail';
 import JobMessagesListPane from './_components/jobMessages/JobMessagesListPane';
 import JobMessagesDetailPane from './_components/jobMessages/JobMessagesDetailPane';
-import { FOLDERS } from './_components/jobMessages/jobMessagesUtils';
+import { FOLDERS } from '@/lib/jobs/jobMessagesUiUtils';
 import styles from './JobMessages.module.css';
 
 const JobMessagesHistoryPage = () => {

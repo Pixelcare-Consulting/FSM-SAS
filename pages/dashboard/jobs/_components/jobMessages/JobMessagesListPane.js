@@ -2,7 +2,7 @@ import React from 'react';
 import { Button, Form, Spinner } from 'react-bootstrap';
 import { Search, X as FeatherX } from 'react-feather';
 import TablePagination from '../../../../../components/common/TablePagination';
-import { formatShortTs, senderBadge, truncate } from './jobMessagesUtils';
+import { formatShortTs, senderBadge, truncate } from '@/lib/jobs/jobMessagesUiUtils';
 import styles from '../../JobMessages.module.css';
 
 const JobMessagesListPane = ({

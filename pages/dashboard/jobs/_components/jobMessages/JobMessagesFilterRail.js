@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { FOLDERS } from './jobMessagesUtils';
+import { FOLDERS } from '@/lib/jobs/jobMessagesUiUtils';
 import styles from '../../JobMessages.module.css';
 
 const JobMessagesFilterRail = ({

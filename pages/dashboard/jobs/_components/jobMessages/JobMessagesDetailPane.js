@@ -8,7 +8,7 @@ import {
   messageStatusMeta,
   senderBadge,
   truncate,
-} from './jobMessagesUtils';
+} from '@/lib/jobs/jobMessagesUiUtils';
 import styles from '../../JobMessages.module.css';
 
 /** Scroll a child into view inside a scroll container without moving the window. */
