@@ -190,7 +190,7 @@
   bottom: 0;
   z-index: 2;
   flex-shrink: 0;
-  padding: 0.65rem 1rem;
+  padding: 0.25rem 0.5rem;
   border-top: 1px solid #e2e8f0;
   background: #fff;
 }

@@ -145,6 +145,7 @@ const JobMessagesListPane = ({
             totalPages={totalPages}
             onPageChange={onPageChange}
             totalItems={totalCount}
+            compact
           />
         </div>
       ) : null}

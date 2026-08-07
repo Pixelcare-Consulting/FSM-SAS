@@ -284,3 +284,50 @@
   color: #9ca3af !important;
 }
 
+/* Compact variant — opt-in via `compact` prop (default unchanged) */
+.compact {
+  padding: 0.35rem 0.5rem !important;
+  border-top: none !important;
+}
+
+.compact .paginationContent {
+  gap: 0.35rem;
+}
+
+.compact .navButton {
+  min-width: 0;
+  padding: 0.15rem 0.45rem !important;
+  font-size: 0.7rem !important;
+  line-height: 1.2;
+  border-radius: 4px;
+}
+
+.compact .navButton:not(:disabled):hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.compact .buttonText {
+  font-size: 0.7rem !important;
+}
+
+.compact .pageInfo {
+  gap: 0.3rem;
+  font-size: 0.72rem !important;
+}
+
+.compact .pageInputGroup {
+  min-width: 40px;
+  max-width: 52px;
+}
+
+.compact .pageInput {
+  padding: 0.15rem 0.25rem !important;
+  font-size: 0.72rem !important;
+  border-radius: 3px;
+}
+
+.compact .pageInput:focus {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12) !important;
+}
+

@@ -18,6 +18,7 @@ import styles from './TablePagination.module.css';
  * @param {Function} props.onPageChange - Callback when page changes (receives new page number)
  * @param {boolean} props.disabled - Disable all controls
  * @param {string} props.className - Additional CSS classes
+ * @param {boolean} props.compact - Smaller controls (opt-in; default false)
  */
 const TablePagination = ({
   currentPage = 1,
@@ -25,7 +26,8 @@ const TablePagination = ({
   totalItems = null,
   onPageChange,
   disabled = false,
-  className = ''
+  className = '',
+  compact = false,
 }) => {
   const [inputValue, setInputValue] = useState(currentPage.toString());
   const [isEditing, setIsEditing] = useState(false);
@@ -104,7 +106,9 @@ const TablePagination = ({
   }
 
   return (
-    <div className={`${styles.paginationContainer} ${className}`}>
+    <div
+      className={`${styles.paginationContainer}${compact ? ` ${styles.compact}` : ''} ${className}`.trim()}
+    >
       <div className={styles.paginationContent}>
         {/* First Entry */}
         <Button

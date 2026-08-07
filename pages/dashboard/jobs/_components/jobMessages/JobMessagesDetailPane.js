@@ -45,10 +45,9 @@ const JobMessagesDetailPane = ({
   const threadEndRef = useRef(null);
   const focusRef = useRef(null);
   const threadScrollRef = useRef(null);
-  const lastAutoScrollKeyRef = useRef('');
+  const lastAutoScrollRef = useRef({ jobId: null, length: 0, lastId: null });
 
-  // Auto-scroll only inside the chat pane (never the page), and only when the
-  // selected job / focus message changes or the thread first loads.
+  // Keep chat scrolled inside the pane only — newest messages stay visible at the bottom.
   useEffect(() => {
     if (!selectedMeta?.jobId) return;
     if (isLoading && threadMessages.length === 0) return;
@@ -56,19 +55,33 @@ const JobMessagesDetailPane = ({
     const container = threadScrollRef.current;
     if (!container) return;
 
-    const key = `${selectedMeta.jobId}:${focusMessageId || 'end'}:${threadMessages.length > 0 ? 'ready' : 'empty'}`;
-    if (lastAutoScrollKeyRef.current === key) return;
-    lastAutoScrollKeyRef.current = key;
+    const jobId = selectedMeta.jobId;
+    const length = threadMessages.length;
+    const lastId = length ? threadMessages[length - 1]?.id : null;
+    const prev = lastAutoScrollRef.current;
+    const jobChanged = prev.jobId !== jobId;
+    const threadGrew =
+      !jobChanged && (length > prev.length || (lastId && lastId !== prev.lastId));
+
+    if (!jobChanged && !threadGrew) return;
+
+    lastAutoScrollRef.current = { jobId, length, lastId };
 
     const frame = requestAnimationFrame(() => {
-      if (focusMessageId && focusRef.current) {
-        scrollWithinContainer(container, focusRef.current, { align: 'nearest' });
-      } else {
+      const run = () => {
+        // Opening a conversation from the list may jump to that message once.
+        // Any newly arrived / sent message should land at the bottom.
+        if (jobChanged && focusMessageId && focusRef.current && !threadGrew) {
+          scrollWithinContainer(container, focusRef.current, { align: 'nearest' });
+          return;
+        }
         scrollContainerToBottom(container);
-      }
+      };
+      // Second frame so DOM has the new bubble before measuring scrollHeight.
+      requestAnimationFrame(run);
     });
     return () => cancelAnimationFrame(frame);
-  }, [selectedMeta?.jobId, focusMessageId, isLoading, threadMessages.length]);
+  }, [selectedMeta?.jobId, focusMessageId, isLoading, threadMessages]);
 
   const handleComposerKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {

@@ -201,6 +201,7 @@ const JobMessagesHistoryPage = () => {
         senderType: senderTypeValue,
       });
       setDraftMessage('');
+      setFocusMessageId(null);
 
       const optimistic = {
         id: dataRow.id,
@@ -224,7 +225,9 @@ const JobMessagesHistoryPage = () => {
 
       queryClient.setQueriesData(['jobs', 'messages', 'list'], (old) => {
         if (!old?.messages) return old;
-        if (old.messages.some((m) => m.jobId === selectedJobId)) {
+
+        // Conversation inbox (grouped by job): refresh preview row only.
+        if (old.groupBy === 'job') {
           return {
             ...old,
             messages: old.messages.map((m) =>
@@ -237,15 +240,28 @@ const JobMessagesHistoryPage = () => {
                     senderName: optimistic.senderName,
                     createdAt: optimistic.createdAt,
                     isUnread: false,
+                    messageCount: (m.messageCount || 1) + 1,
                   }
                 : m
             ),
           };
         }
-        return old;
+
+        // Open job thread: append so newest stays at the bottom after ascending sort.
+        const isThisJobThread =
+          old.messages.length > 0 &&
+          old.messages.every((m) => m.jobId === selectedJobId);
+        if (!isThisJobThread) return old;
+        if (old.messages.some((m) => String(m.id) === String(optimistic.id))) {
+          return old;
+        }
+        return {
+          ...old,
+          messages: [...old.messages, optimistic],
+          totalCount: (old.totalCount || old.messages.length) + 1,
+        };
       });
 
-      void queryClient.invalidateQueries(['jobs', 'messages', 'list']);
       toast.success('Message sent');
     } catch (err) {
       toast.error(err?.message || 'Failed to send message');
