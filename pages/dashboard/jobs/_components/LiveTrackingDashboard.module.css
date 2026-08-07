@@ -1,0 +1,295 @@
+/*
+ * Live job tracking — viewport shell so the page does not scroll as one long stack.
+ * Internal panes (job list, crew timeline) scroll independently.
+ */
+
+.shell {
+  --lt-page-bg: #f1f5f9;
+  --lt-surface: #ffffff;
+  --lt-text: #0f172a;
+  --lt-muted: #64748b;
+  --lt-border: #e2e8f0;
+  --lt-accent: #4171f5;
+  --lt-sidebar-selected: rgba(65, 113, 245, 0.12);
+  --lt-timeline-track: #eef2f7;
+  --lt-timeline-grid: rgba(15, 23, 42, 0.1);
+  --lt-timeline-band: min(240px, 32vh);
+  --lt-label-col: 200px;
+
+  display: flex;
+  flex-direction: column;
+  /* Fit under dashboard header; footer hidden on this route */
+  height: calc(100dvh - 11.5rem);
+  max-height: calc(100dvh - 11.5rem);
+  min-height: 420px;
+  margin-bottom: -1.5rem;
+  overflow: hidden;
+  background: var(--lt-page-bg);
+  color: var(--lt-text);
+  border-radius: 14px;
+  border: 1px solid var(--lt-border);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.topBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  flex-shrink: 0;
+  padding: 12px 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border-bottom: 1px solid var(--lt-border);
+}
+
+.title {
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+  margin: 0 4px 0 0;
+  color: var(--lt-text);
+}
+
+.mainRow {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: 340px;
+  max-width: 42%;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--lt-surface);
+  border-right: 1px solid var(--lt-border);
+}
+
+.sidebarFilters {
+  flex-shrink: 0;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-bottom: 1px solid var(--lt-border);
+  background: #fafbfc;
+}
+
+.sidebarList {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.jobCard {
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border: none;
+  border-bottom: 1px solid var(--lt-border);
+  background: transparent;
+  color: var(--lt-text);
+  cursor: pointer;
+  transition: background 120ms ease, box-shadow 120ms ease;
+}
+
+.jobCard:hover {
+  background: rgba(65, 113, 245, 0.06);
+}
+
+.jobCardSelected {
+  background: var(--lt-sidebar-selected);
+  box-shadow: inset 3px 0 0 var(--lt-accent);
+}
+
+.jobCardRef {
+  font-weight: 650;
+  font-size: 0.9rem;
+  letter-spacing: -0.01em;
+}
+
+.jobCardMeta {
+  margin-top: 4px;
+  font-size: 0.8rem;
+  color: var(--lt-muted);
+  line-height: 1.35;
+}
+
+.statusPill {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.mapPane {
+  flex: 1 1 auto;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.timeline {
+  flex-shrink: 0;
+  height: var(--lt-timeline-band);
+  max-height: var(--lt-timeline-band);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid var(--lt-border);
+  background: var(--lt-surface);
+}
+
+.timelineStats {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 8px 14px;
+  font-size: 0.8rem;
+  color: var(--lt-text);
+  border-bottom: 1px solid var(--lt-border);
+  background: #fafbfc;
+}
+
+.timelineScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 14px 10px;
+}
+
+.timelineHeader {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: var(--lt-label-col) 1fr;
+  gap: 12px;
+  align-items: end;
+  padding: 8px 0 6px;
+  background: var(--lt-surface);
+  border-bottom: 1px solid var(--lt-border);
+}
+
+.timelineHeaderLabel {
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lt-muted);
+}
+
+.timelineHeaderTrack {
+  position: relative;
+  height: 18px;
+}
+
+.timelineHourMark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed var(--lt-timeline-grid);
+  font-size: 10px;
+  color: var(--lt-muted);
+  padding-left: 4px;
+  line-height: 18px;
+}
+
+.crewRow {
+  display: grid;
+  grid-template-columns: var(--lt-label-col) 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.85);
+}
+
+.crewRow:last-child {
+  border-bottom: none;
+}
+
+.crewName {
+  font-weight: 650;
+  font-size: 0.85rem;
+  color: var(--lt-text);
+  line-height: 1.25;
+}
+
+.crewStatuses {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.2;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.crewTrack {
+  position: relative;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--lt-timeline-track);
+  border: 1px solid var(--lt-border);
+}
+
+.nowLine {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  width: 2px;
+  background: #f59e0b;
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.emptyList {
+  padding: 1.25rem;
+  color: var(--lt-muted);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 900px) {
+  .shell {
+    height: auto;
+    max-height: none;
+    min-height: 0;
+    overflow: visible;
+    margin-bottom: 0;
+  }
+
+  .mainRow {
+    flex-direction: column;
+    min-height: 480px;
+  }
+
+  .sidebar {
+    width: 100%;
+    max-width: none;
+    max-height: 240px;
+  }
+
+  .timeline {
+    height: 220px;
+    max-height: 220px;
+  }
+
+  .timelineHeader,
+  .crewRow {
+    grid-template-columns: 140px 1fr;
+  }
+}

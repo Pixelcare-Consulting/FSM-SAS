@@ -10,6 +10,16 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.16.1',
+    date: '2026-08-07',
+    title: 'Live job tracking layout polish',
+    notes: [
+      'improvement: Live job tracking stays in one screen — the job list and crew timeline scroll on their own so the page no longer feels like one long stack.',
+      'improvement: Cleaner job cards, a sticky timeline time header, and a tighter map workspace for day-of dispatch.',
+      'fix: Pixelcare Assistant is hidden on Live job tracking so it no longer covers the map corner.',
+    ],
+  },
+  {
     version: '3.16.0',
     date: '2026-08-07',
     title: 'Inactive job sites + merge duplicate customers',

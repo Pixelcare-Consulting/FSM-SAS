@@ -59,6 +59,9 @@ function MyApp({ Component, pageProps }) {
     (useDashboardChrome ? DefaultDashboardLayout : DefaultMarketingLayout);
 
   const isSignInPage = router.pathname === '/sign-in' || router.pathname === '/authentication/sign-in';
+  const isLiveTrackingPage =
+    router.pathname === '/dashboard/jobs/live-tracking' ||
+    router.pathname.startsWith('/dashboard/jobs/live-tracking/');
 
   useEffect(() => {
     const handleStart = () => setIsLoading(true);
@@ -114,7 +117,7 @@ function MyApp({ Component, pageProps }) {
             <Provider store={store}>
               <QueryClientProvider client={queryClient}>
                 <AppWarmupProvider>
-                  <MainLayout showFooter={!isSignInPage}>
+                  <MainLayout showFooter={!isSignInPage && !isLiveTrackingPage}>
                     <Layout>
                       <Component {...pageProps} setIsLoading={setIsLoading} />
                       {useDashboardChrome && !isSignInPage && (

@@ -34,6 +34,25 @@ export function isJobViewDetailsPath(pathname) {
   return !JOBS_NON_DETAIL_SEGMENTS.has(match[1]);
 }
 
+/** Map-heavy Live tracking — hide the FAB so it does not cover the map / timeline. */
+export function isLiveTrackingPath(pathname) {
+  if (!pathname || typeof pathname !== 'string') return false;
+  return (
+    pathname === '/dashboard/jobs/live-tracking' ||
+    pathname.startsWith('/dashboard/jobs/live-tracking/')
+  );
+}
+
+export function shouldHidePortalAssistant(pathname, asPath) {
+  const candidates = [pathname];
+  if (asPath && typeof asPath === 'string') {
+    candidates.push(asPath.split('?')[0]);
+  }
+  return candidates.some(
+    (p) => isJobViewDetailsPath(p) || isLiveTrackingPath(p)
+  );
+}
+
 function subscribePortalRoot() {
   return () => {};
 }
@@ -78,9 +97,12 @@ export default function PortalAssistantChat() {
   );
   const threadRef = useRef(null);
   const inputRef = useRef(null);
-  const hideOnJobDetails = isJobViewDetailsPath(router.pathname);
+  const hideAssistant = shouldHidePortalAssistant(
+    router.pathname,
+    router.asPath
+  );
 
-  const panelOpen = open && !hideOnJobDetails;
+  const panelOpen = open && !hideAssistant;
 
   useEffect(() => {
     const node = threadRef.current;
@@ -152,7 +174,7 @@ export default function PortalAssistantChat() {
     }
   };
 
-  if (!portalEl || hideOnJobDetails) {
+  if (!portalEl || hideAssistant) {
     return null;
   }
 

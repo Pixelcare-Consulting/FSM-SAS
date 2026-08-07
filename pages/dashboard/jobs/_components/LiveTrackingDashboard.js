@@ -41,6 +41,7 @@ import LiveTrackingAdvancedMarkers, {
   LIVE_TRACKING_STOP_PIN_SIZE_PX,
   LiveTrackingVehicleLegendIcon,
 } from "./LiveTrackingAdvancedMarkers";
+import styles from "./LiveTrackingDashboard.module.css";
 
 const MAP_CONTAINER_STYLE = { width: "100%", height: "100%" };
 
@@ -426,7 +427,14 @@ export default function LiveTrackingDashboard() {
     isFetching: trackingQueryFetching,
     isPreviousData: trackingPreviousData,
   } = useLiveTrackingQuery(mapDate);
-  const [showBetaWelcomeModal, setShowBetaWelcomeModal] = useState(false);
+  const [showBetaWelcomeModal, setShowBetaWelcomeModal] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return !window.localStorage.getItem(LIVE_TRACKING_BETA_MODAL_STORAGE_KEY);
+    } catch {
+      return true;
+    }
+  });
   const [betaModalDontShowAgain, setBetaModalDontShowAgain] = useState(false);
 
   const skipAutoRoutingRef = useRef(false);
@@ -436,32 +444,19 @@ export default function LiveTrackingDashboard() {
 
   const jobStatuses = jobStatusesData;
 
-  useEffect(() => {
-    try {
-      if (typeof window === "undefined") return;
-      if (!window.localStorage.getItem(LIVE_TRACKING_BETA_MODAL_STORAGE_KEY)) {
-        setShowBetaWelcomeModal(true);
-      }
-    } catch {
-      setShowBetaWelcomeModal(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (statusFilter === "all") return;
+  const effectiveStatusFilter = useMemo(() => {
+    if (statusFilter === "all") return "all";
     const ok = jobStatuses.some(
       (s) => String(s.value ?? "").trim() === String(statusFilter).trim()
     );
-    if (!ok) setStatusFilter("all");
+    return ok ? statusFilter : "all";
   }, [jobStatuses, statusFilter]);
 
+  const isSnapshotLoading =
+    trackingQueryLoading || (trackingQueryFetching && trackingPreviousData);
+
   useEffect(() => {
-    if (
-      trackingQueryLoading ||
-      (trackingQueryFetching && trackingPreviousData)
-    ) {
-      setLoadState("loading");
-      setLoadNotice(null);
+    if (isSnapshotLoading) {
       return;
     }
 
@@ -470,84 +465,108 @@ export default function LiveTrackingDashboard() {
     }
 
     const snap = trackingSnapshot;
-    setSkippedNoCoords(0);
+    let cancelled = false;
 
-    if (!snap.ok && snap.error === "NO_CLIENT") {
-      const demo = buildDemoDataset();
-      setDrivers(demo.drivers);
-      setStops(demo.stops);
+    const apply = () => {
+      if (cancelled) return;
+      setSkippedNoCoords(0);
+
+      if (!snap.ok && snap.error === "NO_CLIENT") {
+        const demo = buildDemoDataset();
+        setDrivers(demo.drivers);
+        setStops(demo.stops);
+        setSelectedStopId(null);
+        setSelectedVehicleDriverId(null);
+        setLoadState("demo");
+        setLoadNotice(
+          "Supabase is not configured in the browser (NEXT_PUBLIC_SUPABASE_*). Showing demo data."
+        );
+        return;
+      }
+
+      if (!snap.ok) {
+        toast.error(snap.message || snap.error || "Failed to load jobs");
+        const demo = buildDemoDataset();
+        setDrivers(demo.drivers);
+        setStops(demo.stops);
+        setSelectedStopId(null);
+        setSelectedVehicleDriverId(null);
+        setLoadState("demo");
+        setLoadNotice("Could not load live jobs; showing demo data.");
+        return;
+      }
+
+      setDrivers(snap.drivers);
+      setStops(snap.stops);
       setSelectedStopId(null);
       setSelectedVehicleDriverId(null);
-      setLoadState("demo");
-      setLoadNotice(
-        "Supabase is not configured in the browser (NEXT_PUBLIC_SUPABASE_*). Showing demo data."
-      );
-      return;
-    }
+      setLoadState("ok");
+      setLoadNotice(null);
+      setSkippedNoCoords(snap.skippedNoCoords || 0);
 
-    if (!snap.ok) {
-      toast.error(snap.message || snap.error || "Failed to load jobs");
-      const demo = buildDemoDataset();
-      setDrivers(demo.drivers);
-      setStops(demo.stops);
-      setSelectedStopId(null);
-      setSelectedVehicleDriverId(null);
-      setLoadState("demo");
-      setLoadNotice("Could not load live jobs; showing demo data.");
-      return;
-    }
+      if (snap.skippedNoCoords > 0) {
+        toast(
+          `${snap.skippedNoCoords} job(s) skipped — add coordinates on the linked location.`,
+          { duration: 5500 }
+        );
+      }
+      if (snap.stops.length === 0) {
+        toast("No assigned jobs with a time window on this day.", {
+          duration: 4500,
+        });
+      }
+    };
 
-    setDrivers(snap.drivers);
-    setStops(snap.stops);
-    setSelectedStopId(null);
-    setSelectedVehicleDriverId(null);
-    setLoadState("ok");
-    setLoadNotice(null);
-    setSkippedNoCoords(snap.skippedNoCoords || 0);
-
-    if (snap.skippedNoCoords > 0) {
-      toast(
-        `${snap.skippedNoCoords} job(s) skipped — add coordinates on the linked location.`,
-        { duration: 5500 }
-      );
-    }
-    if (snap.stops.length === 0) {
-      toast("No assigned jobs with a time window on this day.", {
-        duration: 4500,
-      });
-    }
+    const t = window.setTimeout(apply, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
   }, [
     trackingSnapshot,
-    trackingQueryLoading,
-    trackingQueryFetching,
+    isSnapshotLoading,
     trackingPreviousData,
   ]);
-
-  useEffect(() => {
-    setDriverTrackProgress((prev) => {
-      const next = { ...prev };
-      drivers.forEach((d) => {
-        if (next[d.id] == null) next[d.id] = 0.18 + Math.random() * 0.12;
-      });
-      Object.keys(next).forEach((k) => {
-        if (!drivers.some((dd) => dd.id === k)) delete next[k];
-      });
-      return next;
-    });
-  }, [drivers]);
 
   useEffect(() => {
     const id = setInterval(() => {
       setDriverTrackProgress((prev) => {
         const next = { ...prev };
+        drivers.forEach((d) => {
+          if (next[d.id] == null) next[d.id] = 0.18 + Math.random() * 0.12;
+          else next[d.id] = (next[d.id] + 0.004) % 1;
+        });
         Object.keys(next).forEach((k) => {
-          next[k] = (next[k] + 0.004) % 1;
+          if (!drivers.some((dd) => dd.id === k)) delete next[k];
         });
         return next;
       });
     }, 8000);
-    return () => clearInterval(id);
-  }, []);
+    // Seed progress once drivers arrive (async tick avoids sync setState-in-effect).
+    const seed = window.setTimeout(() => {
+      setDriverTrackProgress((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        drivers.forEach((d) => {
+          if (next[d.id] == null) {
+            next[d.id] = 0.18 + Math.random() * 0.12;
+            changed = true;
+          }
+        });
+        Object.keys(next).forEach((k) => {
+          if (!drivers.some((dd) => dd.id === k)) {
+            delete next[k];
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+    }, 0);
+    return () => {
+      clearInterval(id);
+      window.clearTimeout(seed);
+    };
+  }, [drivers]);
 
   const stopsByDriver = useMemo(() => {
     const map = {};
@@ -741,7 +760,7 @@ export default function LiveTrackingDashboard() {
   const filteredStops = useMemo(() => {
     return stops.filter((s) => {
       if (teamFilter !== "all" && s.driverId !== teamFilter) return false;
-      if (!stopMatchesJobStatusFilter(s, statusFilter, jobStatuses)) return false;
+      if (!stopMatchesJobStatusFilter(s, effectiveStatusFilter, jobStatuses)) return false;
       if (search.trim()) {
         const q = search.toLowerCase();
         const statusLabel = getJobStatusLabelFromList(s.jobStatus, jobStatuses);
@@ -751,7 +770,9 @@ export default function LiveTrackingDashboard() {
       }
       return true;
     });
-  }, [stops, teamFilter, statusFilter, search, jobStatuses]);
+  }, [stops, teamFilter, effectiveStatusFilter, search, jobStatuses]);
+
+  const uiLoadState = isSnapshotLoading ? "loading" : loadState;
 
   const selectedStop = useMemo(
     () => stops.find((s) => s.id === selectedStopId) || null,
@@ -908,33 +929,10 @@ export default function LiveTrackingDashboard() {
   }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 0,
-        minHeight: "calc(100vh - 200px)",
-        background: LT.pageBg,
-        color: LT.text,
-        borderRadius: 12,
-        overflow: "hidden",
-        border: `1px solid ${LT.border}`,
-        boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
-      }}
-    >
+    <div className={styles.shell}>
       {/* Top bar */}
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "center",
-          gap: 12,
-          padding: "12px 16px",
-          background: LT.headerBg,
-          borderBottom: `1px solid ${LT.border}`,
-        }}
-      >
-        <div style={{ fontWeight: 700, fontSize: 18, marginRight: 8, color: LT.text }}>
+      <div className={styles.topBar}>
+        <div className={styles.title}>
           Live job tracking
         </div>
         {loadNotice && (
@@ -945,7 +943,7 @@ export default function LiveTrackingDashboard() {
             {loadNotice}
           </span>
         )}
-        {loadState === "loading" && (
+        {uiLoadState === "loading" && (
           <span className="small" style={{ color: LT.muted }}>
             Loading jobs…
           </span>
@@ -1002,28 +1000,19 @@ export default function LiveTrackingDashboard() {
         <div className="ms-auto d-flex align-items-center gap-2 small" style={{ color: LT.muted }}>
           <GeoAlt size={14} />
           <span>
-            {loadState === "loading"
+            {uiLoadState === "loading"
               ? "Loading jobs…"
-              : loadState === "ok"
+              : uiLoadState === "ok"
                 ? "Job list and routes. Map dots move for illustration until a GPS feed is connected."
                 : "Simulated live positions refresh periodically — connect your own GPS feed to replace demo motion."}
           </span>
         </div>
       </div>
 
-      <div style={{ display: "flex", flex: 1, minHeight: 520 }}>
+      <div className={styles.mainRow}>
         {/* Sidebar */}
-        <aside
-          style={{
-            width: 320,
-            maxWidth: "100%",
-            borderRight: `1px solid ${LT.border}`,
-            display: "flex",
-            flexDirection: "column",
-            background: LT.surface,
-          }}
-        >
-          <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+        <aside className={styles.sidebar}>
+          <div className={styles.sidebarFilters}>
             <div className="position-relative">
               <Search
                 size={14}
@@ -1068,15 +1057,16 @@ export default function LiveTrackingDashboard() {
               </select>
             </div>
           </div>
-          <div style={{ overflowY: "auto", flex: 1 }}>
+          <div className={styles.sidebarList}>
             {filteredStops.length === 0 ? (
-              <div className="p-3 text-secondary small">No jobs match filters.</div>
+              <div className={styles.emptyList}>No jobs match filters.</div>
             ) : (
               filteredStops.map((s) => {
                 const jobHex = getJobStatusColorFromList(s.jobStatus, jobStatuses);
                 const b =
                   pillThemeFromSettingsHex(jobHex) || getJobStatusPillTheme(s.jobStatus);
                 const statusLabel = getJobStatusLabelFromList(s.jobStatus, jobStatuses);
+                const selected = s.id === selectedStopId;
                 return (
                 <button
                   type="button"
@@ -1086,39 +1076,24 @@ export default function LiveTrackingDashboard() {
                     setSelectedStopId(s.id);
                     focusMapOnStop(s);
                   }}
-                  style={{
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "12px 14px",
-                    border: "none",
-                    borderBottom: `1px solid ${LT.border}`,
-                    background:
-                      s.id === selectedStopId
-                        ? LT.sidebarSelected
-                        : "transparent",
-                    color: LT.text,
-                    cursor: "pointer",
-                  }}
+                  className={`${styles.jobCard}${selected ? ` ${styles.jobCardSelected}` : ""}`}
                 >
                   <div className="d-flex justify-content-between align-items-start gap-2">
-                    <div style={{ fontWeight: 600 }}>{s.jobRef}</div>
+                    <div className={styles.jobCardRef}>{s.jobRef}</div>
                     <span
+                      className={styles.statusPill}
                       style={{
-                        fontSize: 11,
-                        padding: "2px 8px",
-                        borderRadius: 999,
                         background: b.bg,
                         color: b.color,
-                        whiteSpace: "nowrap",
                       }}
                     >
                       {statusLabel}
                     </span>
                   </div>
-                  <div className="small text-muted" style={{ marginTop: 4 }}>
+                  <div className={styles.jobCardMeta}>
                     {s.customer}
                   </div>
-                  <div className="small text-muted" style={{ marginTop: 2 }}>
+                  <div className={styles.jobCardMeta} style={{ marginTop: 2 }}>
                     {s.windowStart} – {s.windowEnd}
                   </div>
                 </button>
@@ -1129,7 +1104,7 @@ export default function LiveTrackingDashboard() {
         </aside>
 
         {/* Map */}
-        <div style={{ flex: 1, position: "relative", minHeight: 400 }}>
+        <div className={styles.mapPane}>
           {!isLoaded ? (
             <div
               className="d-flex align-items-center justify-content-center h-100 text-secondary"
@@ -1442,7 +1417,7 @@ export default function LiveTrackingDashboard() {
                   <ChevronUp size={14} />
                 </button>
               </div>
-              {loadState === "demo" && loadNotice && (
+              {uiLoadState === "demo" && loadNotice && (
                 <div
                   className="small mb-2"
                   style={{ color: "#b45309", lineHeight: 1.4 }}
@@ -1450,7 +1425,7 @@ export default function LiveTrackingDashboard() {
                   {loadNotice}
                 </div>
               )}
-              {loadState === "ok" && (
+              {uiLoadState === "ok" && (
                 <div
                   className="small mb-2"
                   style={{ color: LT.muted, lineHeight: 1.4 }}
@@ -1620,15 +1595,9 @@ export default function LiveTrackingDashboard() {
         </div>
       </div>
 
-      {/* Timeline footer */}
-      <div
-        style={{
-          borderTop: `1px solid ${LT.border}`,
-          background: LT.surface,
-          padding: "10px 14px 14px",
-        }}
-      >
-        <div className="d-flex flex-wrap align-items-center gap-3 small mb-2" style={{ color: LT.text }}>
+      {/* Timeline footer — fixed band; crews scroll inside */}
+      <div className={styles.timeline}>
+        <div className={styles.timelineStats}>
           <span>
             <strong>{totals.routes}</strong> active routes
           </span>
@@ -1644,7 +1613,23 @@ export default function LiveTrackingDashboard() {
             Timeline {TIMELINE_START}:00 – {TIMELINE_END}:00
           </span>
         </div>
-        <div style={{ overflowX: "auto" }}>
+        <div className={styles.timelineScroll}>
+          <div className={styles.timelineHeader}>
+            <div className={styles.timelineHeaderLabel}>Crew</div>
+            <div className={styles.timelineHeaderTrack}>
+              {[6, 10, 14, 18, 22].map((h) => (
+                <span
+                  key={h}
+                  className={styles.timelineHourMark}
+                  style={{
+                    left: `${((h - TIMELINE_START) / (TIMELINE_END - TIMELINE_START)) * 100}%`,
+                  }}
+                >
+                  {h}h
+                </span>
+              ))}
+            </div>
+          </div>
           {drivers.map((driver) => {
             const rowStops = stops
               .filter((s) => s.driverId === driver.id)
@@ -1653,33 +1638,21 @@ export default function LiveTrackingDashboard() {
               selectedStop?.driverId === driver.id
                 ? selectedStop
                 : rowStops[0] || null;
+            const nowPct = Math.min(
+              100,
+              Math.max(
+                0,
+                ((new Date().getHours() - TIMELINE_START) * 60 +
+                  new Date().getMinutes()) /
+                  TIMELINE_MINUTES *
+                  100
+              )
+            );
             return (
-              <div
-                key={driver.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "200px 1fr",
-                  alignItems: "center",
-                  gap: 12,
-                  marginBottom: 10,
-                }}
-              >
+              <div key={driver.id} className={styles.crewRow}>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: LT.text }}>{driver.name}</div>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "row",
-                      flexWrap: "nowrap",
-                      alignItems: "center",
-                      gap: 6,
-                      marginTop: 4,
-                      fontSize: 11,
-                      lineHeight: 1.2,
-                      minWidth: 0,
-                      overflowX: "auto",
-                    }}
-                  >
+                  <div className={styles.crewName}>{driver.name}</div>
+                  <div className={styles.crewStatuses}>
                     <span style={{ color: LT.muted, flexShrink: 0 }}>Job</span>
                     <LiveStatusPill
                       raw={rowContextStop?.jobStatus}
@@ -1699,32 +1672,7 @@ export default function LiveTrackingDashboard() {
                     />
                   </div>
                 </div>
-                <div
-                    style={{
-                      position: "relative",
-                      height: 36,
-                      borderRadius: 8,
-                      background: LT.timelineTrack,
-                      border: `1px solid ${LT.border}`,
-                    }}
-                >
-                  {[6, 10, 14, 18, 22].map((h) => (
-                    <span
-                      key={h}
-                      style={{
-                        position: "absolute",
-                        left: `${((h - TIMELINE_START) / (TIMELINE_END - TIMELINE_START)) * 100}%`,
-                        top: 0,
-                        bottom: 0,
-                        borderLeft: `1px dashed ${LT.timelineGrid}`,
-                        fontSize: 10,
-                        color: LT.muted,
-                        paddingLeft: 4,
-                      }}
-                    >
-                      {h}h
-                    </span>
-                  ))}
+                <div className={styles.crewTrack}>
                   {rowStops.map((s) => {
                     const start = timeToMinutes(s.windowStart, TIMELINE_START);
                     const end = timeToMinutes(s.windowEnd, TIMELINE_START);
@@ -1745,7 +1693,7 @@ export default function LiveTrackingDashboard() {
                           position: "absolute",
                           left: `${left}%`,
                           width: `${width}%`,
-                          top: 10,
+                          top: 7,
                           height: 18,
                           borderRadius: 6,
                           background:
@@ -1759,24 +1707,8 @@ export default function LiveTrackingDashboard() {
                     );
                   })}
                   <div
-                    style={{
-                      position: "absolute",
-                      left: `${Math.min(
-                        100,
-                        Math.max(
-                          0,
-                          ((new Date().getHours() - TIMELINE_START) * 60 +
-                            new Date().getMinutes()) /
-                            TIMELINE_MINUTES *
-                            100
-                        )
-                      )}%`,
-                      top: 4,
-                      bottom: 4,
-                      width: 2,
-                      background: "#FFB547",
-                      borderRadius: 1,
-                    }}
+                    className={styles.nowLine}
+                    style={{ left: `${nowPct}%` }}
                   />
                 </div>
               </div>
