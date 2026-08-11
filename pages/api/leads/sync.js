@@ -8,7 +8,11 @@ import { leadService, customerService } from '../../../lib/supabase/database';
 import { getSupabaseAdmin } from '../../../lib/supabase/server';
 import { getCustomerAddressFromLead } from '../../../lib/utils/leadLocationName';
 import { ensurePortalCustomerAddressFromLead } from '../../../lib/customers/ensurePortalCustomerAddressFromLead';
-import { findPortalDuplicate } from '../../../lib/customers/portalDuplicateCheck';
+import {
+  findPortalDuplicate,
+  loadPortalContactIndex,
+  findDuplicateInContactIndex,
+} from '../../../lib/customers/portalDuplicateCheck';
 import jwt from 'jsonwebtoken';
 import {
   writeAuditLogFromRequest,
@@ -17,8 +21,22 @@ import {
   AUDIT_STATUS,
   buildChanges,
 } from '../../../lib/services/auditLog';
-import { invalidateListCache } from '../../../lib/supabase/listQueryHelpers';
+import { invalidateListCache, runWithConcurrency } from '../../../lib/supabase/listQueryHelpers';
 import { PORTAL_LIST_CACHE_PREFIX } from '../../../lib/leads/portalListCache';
+import {
+  loadExistingLeadsForResponseBatch,
+  buildExistingLeadMaps,
+  getGoogleFormSyncWatermark,
+  countSyncedGoogleFormLeads,
+  subtractLookbackIso,
+  loadCustomerCodesByIds,
+  reservePortalCustomerCodes,
+} from '../../../lib/leads/googleFormSyncHelpers';
+
+/** Overlap so submissions near the watermark are not missed on incremental sync. */
+const INCREMENTAL_LOOKBACK_MS = 6 * 60 * 60 * 1000;
+/** Parallel create workers (CP codes are pre-reserved to avoid collisions). */
+const CREATE_CONCURRENCY = 3;
 
 /**
  * Map a transformed Google form response to DB lead row (same as sync loop).
@@ -104,13 +122,22 @@ function isCustomerCodeDuplicateError(err) {
  * Allocate next CP and create portal customer; retry on customer_code unique collisions.
  * Soft-deleted codes still occupy UNIQUE — generator + retries skip them.
  */
-async function createPortalCustomerForLead({ supabase, leadId, leadData, maxAttempts = 8 }) {
+async function createPortalCustomerForLead({
+  supabase,
+  leadId,
+  leadData,
+  maxAttempts = 8,
+  preferredCustomerCode = null,
+}) {
   const customerName = leadData.full_name || leadData.email || 'Unknown';
   const customerAddress = getCustomerAddressFromLead(leadData);
   let lastErr = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const customerCode = await customerService.getNextPortalCardCode(supabase);
+    const customerCode =
+      attempt === 0 && preferredCustomerCode
+        ? preferredCustomerCode
+        : await customerService.getNextPortalCardCode(supabase);
     const customerRecord = {
       customer_code: customerCode,
       customer_name: customerName,
@@ -315,9 +342,8 @@ export default async function handler(req, res) {
   if (!FORM_ID) {
     // Try to get the first active Google Form from database
     try {
-      const { getSupabaseAdmin } = require('../../../lib/supabase/server');
       const supabase = getSupabaseAdmin();
-      
+
       const { data: forms, error: formsError } = await supabase
         .from('google_forms')
         .select('form_id, url, name')
@@ -397,14 +423,40 @@ export default async function handler(req, res) {
       });
     }
 
-    // Fetch responses from Google Forms
+    const supabaseAdmin = getSupabaseAdmin();
+    const forceFullSync =
+      req.body?.full_sync === true ||
+      req.body?.full_sync === 'true' ||
+      (Array.isArray(req.body?.response_ids) && req.body.response_ids.length > 0);
+
+    let timestampFilter = null;
+    let incremental = false;
+    if (!forceFullSync) {
+      try {
+        const watermark = await getGoogleFormSyncWatermark(supabaseAdmin);
+        const filterAfter = subtractLookbackIso(watermark, INCREMENTAL_LOOKBACK_MS);
+        if (filterAfter) {
+          timestampFilter = `timestamp > ${filterAfter}`;
+          incremental = true;
+        }
+      } catch (watermarkErr) {
+        console.warn('[Google Forms Sync] Watermark lookup failed; using full fetch:', watermarkErr.message);
+      }
+    }
+
+    // Fetch responses from Google Forms (incremental when possible)
     let googleResponses = [];
     try {
-      googleResponses = await fetchWithServiceAccount(FORM_ID, serviceAccountEmail, privateKey);
-      
-      // Log summary only
+      googleResponses = await fetchWithServiceAccount(
+        FORM_ID,
+        serviceAccountEmail,
+        privateKey,
+        { filter: timestampFilter }
+      );
+
       console.log('📋 Google Forms Response Summary:');
       console.log(`   Total responses fetched: ${googleResponses.length}`);
+      console.log(`   Mode: ${incremental ? `incremental (${timestampFilter})` : 'full'}`);
     } catch (error) {
       console.error('Error fetching from Google Forms:', error);
       
@@ -446,31 +498,48 @@ export default async function handler(req, res) {
     }
 
     if (!googleResponses || googleResponses.length === 0) {
-      console.log('ℹ️ No responses found in Google Forms');
+      console.log('ℹ️ No responses found in Google Forms' + (incremental ? ' (incremental window)' : ''));
+      const previewEmpty = req.body && (req.body.preview === true || req.body.preview === 'true');
+      let alreadyInListCount = 0;
+      if (incremental || previewEmpty) {
+        try {
+          alreadyInListCount = await countSyncedGoogleFormLeads(supabaseAdmin);
+        } catch (_) {
+          alreadyInListCount = 0;
+        }
+      }
+      if (previewEmpty) {
+        return res.status(200).json({
+          preview: true,
+          formId: FORM_ID,
+          incremental,
+          willSync: [],
+          willCreateCount: 0,
+          willUpdateCount: 0,
+          skippedExistingCount: alreadyInListCount,
+          skippedExisting: [],
+          skippedMissing: [],
+          totalResponses: alreadyInListCount,
+          newOrRestoreCount: 0,
+          alreadyInListCount,
+          skippedUnchanged: 0,
+          skippedMissingCount: 0,
+        });
+      }
       return res.status(200).json({
         success: true,
         message: 'No new leads found in Google Forms',
         created: 0,
         skipped: 0,
-        total: 0
+        total: 0,
+        alreadyInListCount,
+        incremental: incremental || undefined,
       });
     }
 
-    // Existing leads: map by response_id and by email+submitted_at for re-sync (merge contact fields from Google)
-    const existingLeads = await leadService.getAll({});
-    const existingByResponseId = new Map();
-    const existingByFallbackKey = new Map();
-    existingLeads.forEach((lead) => {
-      if (lead.google_form_response_id) {
-        existingByResponseId.set(lead.google_form_response_id, lead);
-      }
-      if (lead.submitted_at) {
-        const key = `${lead.email}_${lead.submitted_at}`;
-        if (!existingByFallbackKey.has(key)) {
-          existingByFallbackKey.set(key, lead);
-        }
-      }
-    });
+    // Existing leads: target matching rows for this batch (slim columns, no nested joins)
+    const existingLeads = await loadExistingLeadsForResponseBatch(supabaseAdmin, googleResponses);
+    const { existingByResponseId, existingByFallbackKey } = buildExistingLeadMaps(existingLeads);
 
     const leadsToCreate = [];
     const leadUpdates = [];
@@ -536,7 +605,7 @@ export default async function handler(req, res) {
     // Preview mode: return list for confirmation modal without saving
     const preview = req.body && (req.body.preview === true || req.body.preview === 'true');
     if (preview) {
-      const supabase = getSupabaseAdmin();
+      const supabase = supabaseAdmin;
       const rowFromLeadData = (l) => ({
         google_form_response_id: l.google_form_response_id || null,
         email: l.email,
@@ -547,34 +616,36 @@ export default async function handler(req, res) {
         unit: l.unit || null
       });
 
-      const skippedExisting = [];
-      for (const { existing, leadData } of leadUpdates) {
-        let customer_code = null;
-        if (existing?.customer_id && supabase) {
-          const { data: cust } = await supabase
-            .from('customer')
-            .select('customer_code')
-            .eq('id', existing.customer_id)
-            .is('deleted_at', null)
-            .maybeSingle();
-          customer_code = cust?.customer_code || null;
-        }
-        skippedExisting.push({
-          email: existing.email || leadData.email,
-          full_name: existing.full_name || leadData.full_name,
-          customer_code,
-        });
-      }
+      // Batch customer codes (1–N chunked queries) instead of per-row lookups
+      const customerCodeById = await loadCustomerCodesByIds(
+        supabase,
+        leadUpdates.map(({ existing }) => existing?.customer_id)
+      );
+      const skippedExisting = leadUpdates.map(({ existing, leadData }) => ({
+        email: existing.email || leadData.email,
+        full_name: existing.full_name || leadData.full_name,
+        customer_code: existing?.customer_id
+          ? customerCodeById.get(existing.customer_id) || null
+          : null,
+      }));
 
+      // Duplicate checks: email-scoped queries for small batches; one contact index for large imports
       const willFromNew = [];
       const skippedEmailDuplicates = [];
+      const useContactIndex = leadsToCreate.length > 25;
+      const contactIndex = useContactIndex
+        ? await loadPortalContactIndex(supabase)
+        : null;
       for (const leadData of leadsToCreate) {
-        const duplicate = supabase
-          ? await findPortalDuplicate(supabase, {
+        const duplicate = useContactIndex
+          ? findDuplicateInContactIndex(contactIndex, {
               email: leadData.email,
               phone: leadData.handphone,
             })
-          : null;
+          : await findPortalDuplicate(supabase, {
+              email: leadData.email,
+              phone: leadData.handphone,
+            });
         if (duplicate?.existingCode) {
           skippedEmailDuplicates.push({
             email: leadData.email,
@@ -587,11 +658,21 @@ export default async function handler(req, res) {
         }
       }
 
+      // Incremental fetch only returns recent responses — report full portal synced count for UI
+      let alreadyInListCount = skippedExistingCount;
+      let totalResponses = googleResponses.length;
+      if (incremental) {
+        const syncedCount = await countSyncedGoogleFormLeads(supabase);
+        alreadyInListCount = Math.max(skippedExistingCount, syncedCount);
+        totalResponses = Math.max(googleResponses.length, syncedCount + willFromNew.length);
+      }
+
       const willSync = [...willFromNew];
       const skippedMissing = skipped.filter((s) => s.reason && String(s.reason).includes('Missing'));
       return res.status(200).json({
         preview: true,
         formId: FORM_ID,
+        incremental,
         willSync,
         willCreateCount: willFromNew.length,
         willUpdateCount: 0,
@@ -600,9 +681,9 @@ export default async function handler(req, res) {
         skippedExisting,
         skippedEmailDuplicates: skippedEmailDuplicates.length > 0 ? skippedEmailDuplicates : undefined,
         skippedMissing,
-        totalResponses: googleResponses.length,
+        totalResponses,
         newOrRestoreCount: willSync.length,
-        alreadyInListCount: skippedExistingCount,
+        alreadyInListCount,
         skippedUnchanged: unchangedCount,
         skippedMissingCount: skippedMissing.length
       });
@@ -620,7 +701,7 @@ export default async function handler(req, res) {
     const errors = [];
     const addedLeadAuditAll = [];
     const restoredLeadAuditAll = [];
-    const supabase = getSupabaseAdmin();
+    const supabase = supabaseAdmin;
 
     if (skippedExistingChangedCount > 0) {
       console.log(
@@ -641,88 +722,130 @@ export default async function handler(req, res) {
 
     if (leadsToImport.length > 0) {
       console.log(`\n💾 Creating ${leadsToImport.length} leads and assigning CP codes...`);
-      for (const leadData of leadsToImport) {
-        try {
-          // 1. Create lead
-          const lead = await leadService.create(leadData);
-          created++;
-          // 2. Assign next CP and create portal customer so lead has customer_code immediately
-          const { customer, customerCode } = await createPortalCustomerForLead({
-            supabase,
-            leadId: lead.id,
-            leadData,
-          });
-          await leadService.update(lead.id, { customer_id: customer.id });
-          await ensurePortalCustomerAddressFromLead({
-            supabase,
-            customerId: customer.id,
-            lead: { ...leadData, ...lead }
-          });
-          addedLeadAuditAll.push(buildAddedLeadAuditEntry(lead, leadData, customerCode));
-          console.log(`   ✓ ${leadData.email} → ${customerCode}`);
-        } catch (err) {
-          // Duplicate key = lead already exists (e.g. soft-deleted or re-sync): restore or skip
-          if (err.code === '23505' && (err.message?.includes('google_form_response_id') || (err.details && String(err.details).includes('google_form_response_id')))) {
-            try {
-              const existing = await findExistingLeadByResponseId(leadData.google_form_response_id);
-              if (!existing) {
-                errors.push({ email: leadData.email, error: 'Duplicate key but lead not found' });
-                continue;
-              }
-              if (existing.deleted_at) {
-                const beforeRestore = await leadService.findById(existing.id, supabase);
-                // Soft-deleted row is not in getAll(); merge full Google payload, then un-delete
-                await mergeGoogleDataIntoExistingLead({
-                  existing,
-                  leadData,
-                  supabase,
-                  restore: true,
-                  leadService,
-                  customerService
-                });
-                let logMsg = `   ↻ Restored ${leadData.email} (merged latest data from Google)`;
-                let restoredCustomerCode = null;
-                if (!existing.customer_id) {
-                  const { customer, customerCode } = await createPortalCustomerForLead({
-                    supabase,
-                    leadId: existing.id,
-                    leadData,
-                  });
-                  restoredCustomerCode = customerCode;
-                  await leadService.update(existing.id, { customer_id: customer.id });
-                  await ensurePortalCustomerAddressFromLead({
-                    supabase,
-                    customerId: customer.id,
-                    lead: leadData
-                  });
-                  logMsg += ` → ${customerCode}`;
+      const reservedCodes = await reservePortalCustomerCodes(supabase, leadsToImport.length);
+
+      const importResults = await runWithConcurrency(
+        leadsToImport.map((leadData, index) => async () => {
+          const preferredCustomerCode = reservedCodes[index] || null;
+          try {
+            const lead = await leadService.create(leadData, supabase);
+            const { customer, customerCode } = await createPortalCustomerForLead({
+              supabase,
+              leadId: lead.id,
+              leadData,
+              preferredCustomerCode,
+            });
+            await leadService.update(lead.id, { customer_id: customer.id }, supabase);
+            await ensurePortalCustomerAddressFromLead({
+              supabase,
+              customerId: customer.id,
+              lead: { ...leadData, ...lead },
+            });
+            console.log(`   ✓ ${leadData.email} → ${customerCode}`);
+            return {
+              type: 'created',
+              audit: buildAddedLeadAuditEntry(lead, leadData, customerCode),
+            };
+          } catch (err) {
+            if (
+              err.code === '23505' &&
+              (err.message?.includes('google_form_response_id') ||
+                (err.details && String(err.details).includes('google_form_response_id')))
+            ) {
+              try {
+                const existing = await findExistingLeadByResponseId(leadData.google_form_response_id);
+                if (!existing) {
+                  return {
+                    type: 'error',
+                    error: { email: leadData.email, error: 'Duplicate key but lead not found' },
+                  };
                 }
-                const afterRestore = await leadService.findById(existing.id, supabase);
-                restoredLeadAuditAll.push({
-                  leadId: existing.id,
-                  email: leadData.email,
-                  fullName: leadData.full_name,
-                  customerCode: restoredCustomerCode,
-                  fieldChanges: buildChanges(beforeRestore || {}, afterRestore || leadData),
-                });
-                console.log(logMsg);
-                restored++;
-              } else {
-                // Active duplicate: lead already exists in portal — do not overwrite portal edits
-                console.log(`   ⏭️ Skipped ${leadData.email} (already in portal; Google data not applied)`);
+                if (existing.deleted_at) {
+                  const beforeRestore = await leadService.findById(existing.id, supabase);
+                  await mergeGoogleDataIntoExistingLead({
+                    existing,
+                    leadData,
+                    supabase,
+                    restore: true,
+                    leadService,
+                    customerService,
+                  });
+                  let logMsg = `   ↻ Restored ${leadData.email} (merged latest data from Google)`;
+                  let restoredCustomerCode = null;
+                  if (!existing.customer_id) {
+                    const { customer, customerCode } = await createPortalCustomerForLead({
+                      supabase,
+                      leadId: existing.id,
+                      leadData,
+                      preferredCustomerCode,
+                    });
+                    restoredCustomerCode = customerCode;
+                    await leadService.update(existing.id, { customer_id: customer.id }, supabase);
+                    await ensurePortalCustomerAddressFromLead({
+                      supabase,
+                      customerId: customer.id,
+                      lead: leadData,
+                    });
+                    logMsg += ` → ${customerCode}`;
+                  }
+                  const afterRestore = await leadService.findById(existing.id, supabase);
+                  console.log(logMsg);
+                  return {
+                    type: 'restored',
+                    audit: {
+                      leadId: existing.id,
+                      email: leadData.email,
+                      fullName: leadData.full_name,
+                      customerCode: restoredCustomerCode,
+                      fieldChanges: buildChanges(beforeRestore || {}, afterRestore || leadData),
+                    },
+                  };
+                }
+                console.log(
+                  `   ⏭️ Skipped ${leadData.email} (already in portal; Google data not applied)`
+                );
+                return { type: 'skipped' };
+              } catch (restoreErr) {
+                console.error(`   ✗ Failed to restore/skip ${leadData.email}:`, restoreErr.message);
+                return {
+                  type: 'error',
+                  error: {
+                    email: leadData.email,
+                    error: restoreErr.message || 'Duplicate entry (already exists)',
+                  },
+                };
               }
-            } catch (restoreErr) {
-              console.error(`   ✗ Failed to restore/skip ${leadData.email}:`, restoreErr.message);
-              errors.push({ email: leadData.email, error: restoreErr.message || 'Duplicate entry (already exists)' });
             }
-            continue;
+            console.error(`   ✗ Failed for ${leadData.email}:`, err.message);
+            if (
+              err.code === '23505' ||
+              err.message?.includes('duplicate') ||
+              err.message?.includes('unique')
+            ) {
+              return {
+                type: 'error',
+                error: { email: leadData.email, error: 'Duplicate entry (already exists)' },
+              };
+            }
+            return {
+              type: 'error',
+              error: { email: leadData.email, error: err.message || 'Unknown error' },
+            };
           }
-          console.error(`   ✗ Failed for ${leadData.email}:`, err.message);
-          if (err.code === '23505' || err.message?.includes('duplicate') || err.message?.includes('unique')) {
-            errors.push({ email: leadData.email, error: 'Duplicate entry (already exists)' });
-          } else {
-            errors.push({ email: leadData.email, error: err.message || 'Unknown error' });
-          }
+        }),
+        CREATE_CONCURRENCY
+      );
+
+      for (const result of importResults) {
+        if (!result) continue;
+        if (result.type === 'created') {
+          created += 1;
+          if (result.audit) addedLeadAuditAll.push(result.audit);
+        } else if (result.type === 'restored') {
+          restored += 1;
+          if (result.audit) restoredLeadAuditAll.push(result.audit);
+        } else if (result.type === 'error' && result.error) {
+          errors.push(result.error);
         }
       }
       console.log(`✅ Created ${created}, restored ${restored} leads with CP codes`);
@@ -740,6 +863,7 @@ export default async function handler(req, res) {
       skippedUnchanged: unchangedCount,
       alreadyInListCount: skippedExistingCount,
       total: googleResponses.length,
+      incremental: incremental || undefined,
       errors: errors.length > 0 ? errors : undefined
     };
 
@@ -1029,9 +1153,10 @@ function mapFormQuestionTitleToLeadFields(questionIdMap, titleRaw, descriptionRa
 }
 
 /**
- * Fetch with Service Account using JWT authentication
+ * Fetch with Service Account using JWT authentication.
+ * @param {{ filter?: string|null }} [options] - Google Forms responses.list filter (e.g. timestamp > ...)
  */
-async function fetchWithServiceAccount(formId, serviceAccountEmail, privateKey) {
+async function fetchWithServiceAccount(formId, serviceAccountEmail, privateKey, options = {}) {
   // Validate formId
   if (!formId || typeof formId !== 'string' || formId.trim().length === 0) {
     throw new Error('Invalid form ID. Please check the Google Forms URL in settings.');
@@ -1120,37 +1245,58 @@ To fix this:
         'Add a title containing e.g. Phone, Mobile, Contact no., Whatsapp, or Handphone, or it may live only in a group row (now scanned).'
     );
   }
-  
-  // Fetch responses
-  const apiUrl = `https://forms.googleapis.com/v1/forms/${formId}/responses`;
-  const response = await fetch(apiUrl, {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    }
-  });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    if (response.status === 404) {
-      throw new Error(`Form responses not found (404). The form ID "${formId}" may be incorrect, or the service account doesn't have access to this form's responses.`);
-    } else if (response.status === 403) {
-      throw new Error(`Access denied (403). The service account doesn't have permission to access form responses. Please share the Google Form with the service account email: ${serviceAccountEmail}`);
-    } else {
-      const errorText = errorData.error?.message || await response.text().catch(() => 'Unknown error');
-      throw new Error(`Google Forms API error: ${response.status} ${response.statusText} - ${errorText}`);
-    }
-  }
+  // Paginate responses; optional timestamp filter for incremental sync
+  const allApiResponses = [];
+  let pageToken = null;
+  let page = 0;
+  do {
+    page += 1;
+    const params = new URLSearchParams();
+    params.set('pageSize', '5000');
+    if (options.filter) params.set('filter', options.filter);
+    if (pageToken) params.set('pageToken', pageToken);
 
-  const data = await response.json();
-  
-  // Store raw data for logging (before transformation)
-  if (data.responses && data.responses.length > 0) {
-    console.log('\n📥 RAW Google Forms API Response (before transformation):');
-    console.log(JSON.stringify(data, null, 2));
-  }
-  
-  return transformGoogleFormResponses(data, questionIdMap);
+    const apiUrl = `https://forms.googleapis.com/v1/forms/${formId}/responses?${params.toString()}`;
+    const response = await fetch(apiUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      if (response.status === 404) {
+        throw new Error(
+          `Form responses not found (404). The form ID "${formId}" may be incorrect, or the service account doesn't have access to this form's responses.`
+        );
+      } else if (response.status === 403) {
+        throw new Error(
+          `Access denied (403). The service account doesn't have permission to access form responses. Please share the Google Form with the service account email: ${serviceAccountEmail}`
+        );
+      } else {
+        const errorText =
+          errorData.error?.message || (await response.text().catch(() => 'Unknown error'));
+        throw new Error(
+          `Google Forms API error: ${response.status} ${response.statusText} - ${errorText}`
+        );
+      }
+    }
+
+    const data = await response.json();
+    if (Array.isArray(data.responses) && data.responses.length) {
+      allApiResponses.push(...data.responses);
+    }
+    pageToken = data.nextPageToken || null;
+  } while (pageToken);
+
+  console.log(
+    `[Google Forms Sync] Fetched ${allApiResponses.length} response(s) across ${page} page(s)` +
+      (options.filter ? ` with filter: ${options.filter}` : '')
+  );
+
+  return transformGoogleFormResponses({ responses: allApiResponses }, questionIdMap);
 }
 
 /**

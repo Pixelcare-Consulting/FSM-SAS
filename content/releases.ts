@@ -10,6 +10,16 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.20.0',
+    date: '2026-08-11',
+    title: 'Faster Google Form sync',
+    notes: [
+      'improvement: Google Form Sync & Refresh checks for new responses much faster — already-imported leads are skipped without re-downloading everything.',
+      'improvement: Sync preview opens quicker with clearer progress (“Checking new responses…”) while the portal looks for new form submissions.',
+      'fix: Importing several new leads at once is smoother and less likely to stall on customer code assignment.',
+    ],
+  },
+  {
     version: '3.19.0',
     date: '2026-08-07',
     title: 'Job Messages in the top bar',

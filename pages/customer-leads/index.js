@@ -2101,7 +2101,7 @@ const CustomerLeadsPage = () => {
                   {syncPreviewLoading ? (
                     <>
                       <Spinner animation="border" size="sm" className="me-2" />
-                      Loading...
+                      Checking new responses...
                     </>
                   ) : (
                     <>
