@@ -8,6 +8,7 @@ import { DashboardHeader } from 'sub-components';
 import { useEnterToSearch } from '@/hooks/useEnterToSearch';
 import {
   markJobMessagesReadRequest,
+  markJobMessagesUnreadRequest,
   sendJobMessageRequest,
   useJobMessagesListQuery,
   useJobMessagesUnreadCountQuery,
@@ -183,6 +184,60 @@ const JobMessagesHistoryPage = () => {
     setDraftMessage('');
   };
 
+  const onMarkUnread = useCallback(
+    async (rowOrJobId) => {
+      const jobId =
+        typeof rowOrJobId === 'string' || typeof rowOrJobId === 'number'
+          ? String(rowOrJobId)
+          : rowOrJobId?.jobId
+            ? String(rowOrJobId.jobId)
+            : '';
+      if (!jobId) return;
+
+      queryClient.setQueriesData(['jobs', 'messages', 'list'], (old) => {
+        if (!old?.messages) return old;
+        let bumped = 0;
+        const messages = old.messages.map((m) => {
+          if (m.jobId === jobId && !m.isUnread) {
+            bumped += 1;
+            return { ...m, isUnread: true, readAt: null };
+          }
+          return m;
+        });
+        return {
+          ...old,
+          messages,
+          unreadCount:
+            typeof old.unreadCount === 'number'
+              ? old.unreadCount + Math.max(bumped, 1)
+              : old.unreadCount,
+        };
+      });
+      queryClient.setQueriesData(['jobs', 'messages', 'unread-count'], (old) => {
+        if (!old || typeof old.unreadCount !== 'number') return old;
+        return {
+          ...old,
+          unreadCount: old.unreadCount + 1,
+        };
+      });
+
+      // Deselect before the API call so mark-on-open cannot clear unread again.
+      if (selectedJobId && String(selectedJobId) === jobId) {
+        clearSelection();
+      }
+
+      try {
+        await markJobMessagesUnreadRequest({ jobId });
+        void queryClient.invalidateQueries(['jobs', 'messages', 'unread-count']);
+      } catch (err) {
+        toast.error(err?.message || 'Failed to mark as unread');
+        void queryClient.invalidateQueries(['jobs', 'messages', 'list']);
+        void queryClient.invalidateQueries(['jobs', 'messages', 'unread-count']);
+      }
+    },
+    [queryClient, selectedJobId]
+  );
+
   const clearAllFilters = () => {
     clearSearch();
     setFolderId('all');
@@ -333,6 +388,7 @@ const JobMessagesHistoryPage = () => {
             error={error}
             selectedJobId={selectedJobId}
             onSelectRow={onSelectRow}
+            onMarkUnread={onMarkUnread}
             currentPage={currentPage}
             totalPages={totalPages}
             onPageChange={setCurrentPage}
@@ -351,6 +407,7 @@ const JobMessagesHistoryPage = () => {
             isSending={isSending}
             onBack={clearSelection}
             onClose={clearSelection}
+            onMarkUnread={onMarkUnread}
             hiddenOnMobile={!showMobileDetail}
           />
         </div>

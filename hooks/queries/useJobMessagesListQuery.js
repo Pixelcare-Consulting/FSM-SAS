@@ -67,6 +67,23 @@ export async function markJobMessagesReadRequest({ messageIds, jobId } = {}) {
   return response.json();
 }
 
+export async function markJobMessagesUnreadRequest({ messageIds, jobId } = {}) {
+  const response = await fetch('/api/jobs/messages/mark-unread', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...(Array.isArray(messageIds) ? { messageIds } : {}),
+      ...(jobId ? { jobId } : {}),
+    }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || body.message || `Failed to mark unread (${response.status})`);
+  }
+  return response.json();
+}
+
 export async function sendJobMessageRequest({ jobId, message, senderType = 'ADMIN' } = {}) {
   if (!jobId) throw new Error('jobId is required');
   const messageText = String(message || '').trim();

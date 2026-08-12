@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Button, Form, Spinner } from 'react-bootstrap';
-import { ArrowLeft, MessageSquare, Send } from 'react-feather';
+import { ArrowLeft, Mail, MessageSquare, Send } from 'react-feather';
 import {
   formatShortTs,
   formatTs,
@@ -68,6 +68,7 @@ const JobMessagesDetailPane = ({
   isSending = false,
   onBack,
   onClose,
+  onMarkUnread,
   hiddenOnMobile = false,
 }) => {
   const threadEndRef = useRef(null);
@@ -177,6 +178,18 @@ const JobMessagesDetailPane = ({
                 >
                   Open {selectedMeta.jobNumber || 'job'}
                 </Link>
+              ) : null}
+              {!selectedMeta.isUnread && selectedMeta.jobId ? (
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  className="d-inline-flex align-items-center gap-1"
+                  onClick={() => onMarkUnread?.(selectedMeta)}
+                  title="Mark as unread"
+                >
+                  <Mail size={14} aria-hidden />
+                  Mark as unread
+                </Button>
               ) : null}
               <span className={styles.detailThreadCount}>
                 {isLoading

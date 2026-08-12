@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Form, Spinner } from 'react-bootstrap';
-import { Search, X as FeatherX } from 'react-feather';
+import { Mail, Search, X as FeatherX } from 'react-feather';
 import TablePagination from '../../../../../components/common/TablePagination';
 import { formatShortTs, senderBadge, truncate } from '@/lib/jobs/jobMessagesUiUtils';
 import styles from '../../JobMessages.module.css';
@@ -20,11 +20,25 @@ const JobMessagesListPane = ({
   error,
   selectedJobId,
   onSelectRow,
+  onMarkUnread,
   currentPage,
   totalPages,
   onPageChange,
   hiddenOnMobile = false,
 }) => {
+  const handleRowKeyDown = (e, row) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onSelectRow?.(row);
+    }
+  };
+
+  const handleMarkUnreadClick = (e, row) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onMarkUnread?.(row);
+  };
+
   return (
     <section
       className={`${styles.listPane}${hiddenOnMobile ? ` ${styles.paneHiddenMobile}` : ''}`}
@@ -92,12 +106,14 @@ const JobMessagesListPane = ({
               const isSelected = Boolean(selectedJobId) && selectedJobId === row.jobId;
               return (
                 <li key={row.jobId || row.id}>
-                  <button
-                    type="button"
+                  <div
+                    role="button"
+                    tabIndex={0}
                     className={`${styles.messageRow}${unread ? ` ${styles.messageRowUnread}` : ''}${
                       isSelected ? ` ${styles.messageRowSelected}` : ''
                     }`}
                     onClick={() => onSelectRow(row)}
+                    onKeyDown={(e) => handleRowKeyDown(e, row)}
                   >
                     <span
                       className={unread ? styles.unreadDot : styles.unreadDotSpacer}
@@ -130,7 +146,20 @@ const JobMessagesListPane = ({
                         ) : null}
                       </span>
                     </span>
-                  </button>
+                    {!unread ? (
+                      <button
+                        type="button"
+                        className={styles.markUnreadBtn}
+                        title="Mark as unread"
+                        aria-label={`Mark ${row.jobNumber || 'conversation'} as unread`}
+                        onClick={(e) => handleMarkUnreadClick(e, row)}
+                      >
+                        <Mail size={15} aria-hidden />
+                      </button>
+                    ) : (
+                      <span className={styles.markUnreadBtnSpacer} aria-hidden />
+                    )}
+                  </div>
                 </li>
               );
             })}

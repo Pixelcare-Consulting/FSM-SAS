@@ -10,6 +10,14 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.22.0',
+    date: '2026-08-12',
+    title: 'Mark Job Messages unread',
+    notes: [
+      'feature: You can mark a Job Message conversation as unread again if you opened it by mistake — from the list or the open chat header.',
+    ],
+  },
+  {
     version: '3.21.0',
     date: '2026-08-12',
     title: 'Quotations paging and job SAP links',
