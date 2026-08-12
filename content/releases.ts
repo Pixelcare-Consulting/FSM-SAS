@@ -10,6 +10,16 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.21.0',
+    date: '2026-08-12',
+    title: 'Quotations paging and job SAP links',
+    notes: [
+      'improvement: Quotation date filter searches SAP directly so older quotes are easier to find without paging through every page.',
+      'fix: Customer Quotations pages after the first now load correctly instead of showing empty results.',
+      'fix: Edit Job can find Service Calls and Sales Orders when the customer has a linked SAP code.',
+    ],
+  },
+  {
     version: '3.20.0',
     date: '2026-08-11',
     title: 'Faster Google Form sync',

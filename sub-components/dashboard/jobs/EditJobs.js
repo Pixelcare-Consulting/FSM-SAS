@@ -1193,6 +1193,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
         email: initialJobData?.email || "",
         phone_number: initialJobData?.phone_number || "",
         customer_address: initialJobData?.customer_address || "",
+        sap_card_code: initialJobData?.sap_card_code || null,
       },
     ]);
     setCustomersLoaded(true);
@@ -1204,6 +1205,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
     initialJobData?.email,
     initialJobData?.phone_number,
     initialJobData?.customer_address,
+    initialJobData?.sap_card_code,
   ]);
 
   const fetchCustomers = async () => {
@@ -1251,6 +1253,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
           email: customer.email || "",
           phone_number: customer.phone_number || "",
           customer_address: customer.customer_address || "",
+          sap_card_code: customer.sap_card_code || null,
         }));
       }
 
@@ -1272,6 +1275,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
           email: initialJobData.email || "",
           phone_number: initialJobData.phone_number || "",
           customer_address: initialJobData.customer_address || "",
+          sap_card_code: initialJobData.sap_card_code || null,
         });
       }
 
@@ -2018,6 +2022,48 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
         });
       }
 
+      // When SAP returns no open calls, surface open/in-progress local service_call rows.
+      if (formattedServiceCalls.length === 0) {
+        try {
+          const supabase = getSupabaseClient();
+          const customerId =
+            selectedCustomer?.customerId ||
+            initialJobData?.customerId ||
+            initialJobData?.customerID;
+          if (supabase && customerId) {
+            const { data: localRows } = await supabase
+              .from("service_call")
+              .select(
+                "call_number, subject, description, status, customer_name_sap, sap_create_date, sap_create_time"
+              )
+              .eq("customer_id", customerId)
+              .in("status", ["OPEN", "IN_PROGRESS"])
+              .is("deleted_at", null)
+              .order("call_number", { ascending: false })
+              .limit(50);
+
+            if (Array.isArray(localRows) && localRows.length > 0) {
+              formattedServiceCalls = localRows
+                .filter((row) => row?.call_number)
+                .map((row) => ({
+                  value: row.call_number,
+                  label: `${row.call_number} - ${row.subject || "(local)"}`,
+                  serviceCallID: row.call_number,
+                  subject: row.subject || "",
+                  customerName: row.customer_name_sap || "",
+                  createDate: row.sap_create_date || "",
+                  createTime: row.sap_create_time || "",
+                  description: row.description || "",
+                  fetchedForCardCode: cardCode,
+                  fromLocal: true,
+                }));
+            }
+          }
+        } catch (localScErr) {
+          console.warn("Local service_call fallback:", localScErr);
+        }
+      }
+
       if (existingServiceCallID) {
         matchedServiceCall = formattedServiceCalls.find(
           (sc) =>
@@ -2543,7 +2589,9 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
       return;
     }
 
-    const cardCode = resolveCustomerCardCode(formData, selectedCustomer);
+    const cardCode =
+      serviceCall.fetchedForCardCode ||
+      resolveCustomerCardCode(formData, selectedCustomer);
     if (!selectedCustomer || !cardCode) {
       if (!quiet) {
         toast.error("Please select a customer first", {

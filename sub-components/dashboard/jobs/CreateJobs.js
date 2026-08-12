@@ -2177,7 +2177,10 @@ const AddNewJobs = ({ validateJobForm }) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            cardCode: selectedCustomer.value,
+            cardCode:
+              selectedServiceCall.fetchedForCardCode ||
+              selectedCustomer.cardCode ||
+              selectedCustomer.value,
             serviceCallID: selectedServiceCall.value,
           }),
         });

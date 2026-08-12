@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Spinner, Alert, Container, Row, Col, Form, InputGroup, Button } from 'react-bootstrap';
 import { Search, Calendar, XCircle, CaretUpFill, CaretDownFill } from 'react-bootstrap-icons';
-import { format, parse, isValid, startOfDay, endOfDay } from 'date-fns';
+import { format } from 'date-fns';
 import TablePagination from 'components/common/TablePagination';
 
 const QuotationsTab = ({ customerId }) => {
@@ -31,16 +31,20 @@ const QuotationsTab = ({ customerId }) => {
 
       try {
         setLoading(true);
+        const payload = {
+          cardCode: customerId,
+          page: currentPage,
+          limit: quotationsPerPage,
+        };
+        if (dateFrom) payload.dateFrom = dateFrom;
+        if (dateTo) payload.dateTo = dateTo;
+
         const response = await fetch('/api/getQuotations', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            cardCode: customerId,
-            page: currentPage,
-            limit: quotationsPerPage,
-          }),
+          body: JSON.stringify(payload),
         });
 
         const data = await response.json().catch(() => null);
@@ -92,7 +96,7 @@ const QuotationsTab = ({ customerId }) => {
     };
 
     fetchQuotations();
-  }, [customerId, currentPage, quotationsPerPage, retryCount, maxRetries]);
+  }, [customerId, currentPage, quotationsPerPage, retryCount, maxRetries, dateFrom, dateTo]);
 
   useEffect(() => {
     setQuotations([]);
@@ -128,18 +132,7 @@ const QuotationsTab = ({ customerId }) => {
     }).format(amount);
   };
 
-  const parseQuoteDocDate = (docDate) => {
-    if (!docDate || String(docDate).length < 8) return null;
-    try {
-      const y = String(docDate).substring(0, 4);
-      const m = String(docDate).substring(4, 6);
-      const d = String(docDate).substring(6, 8);
-      return new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
-    } catch {
-      return null;
-    }
-  };
-
+  // Search/status are page-local; date range is applied server-side via the API.
   const filteredQuotations = quotations.filter((quote) => {
     const matchesSearch = Object.values(quote).some(
       (value) =>
@@ -153,24 +146,7 @@ const QuotationsTab = ({ customerId }) => {
       matchesStatus = quote.DocStatus === 'C';
     }
 
-    let matchesDateRange = true;
-    if (dateFrom || dateTo) {
-      const qd = parseQuoteDocDate(quote.DocDate);
-      if (!qd) {
-        matchesDateRange = false;
-      } else {
-        if (dateFrom) {
-          const from = startOfDay(parse(dateFrom, 'yyyy-MM-dd', new Date()));
-          if (isValid(from) && qd < from) matchesDateRange = false;
-        }
-        if (dateTo && matchesDateRange) {
-          const to = endOfDay(parse(dateTo, 'yyyy-MM-dd', new Date()));
-          if (isValid(to) && qd > to) matchesDateRange = false;
-        }
-      }
-    }
-
-    return matchesSearch && matchesStatus && matchesDateRange;
+    return matchesSearch && matchesStatus;
   });
 
   const handleSearch = (e) => {
@@ -288,7 +264,9 @@ const QuotationsTab = ({ customerId }) => {
     );
   }
 
-  if (!quotations.length && !loading && !error) {
+  // Only show the empty-state alert when SAP truly has zero quotations.
+  // Keep table + pagination when totalCount > 0 but this page is empty.
+  if (!quotations.length && !loading && !error && totalCount === 0) {
     return (
       <Alert variant="info">
         <Alert.Heading>No Quotations Found</Alert.Heading>
@@ -298,6 +276,9 @@ const QuotationsTab = ({ customerId }) => {
           <li>The customer has no quotations in the system</li>
           <li>The quotations data is not yet available</li>
           <li>There may be a temporary connectivity issue</li>
+          {(dateFrom || dateTo) && (
+            <li>No quotations match the selected date range — try clearing the dates</li>
+          )}
         </ul>
         <div className="mt-3">
           <Button
@@ -409,7 +390,16 @@ const QuotationsTab = ({ customerId }) => {
                 </tr>
               </thead>
               <tbody>
-                {currentQuotations.map((quote) => (
+                {currentQuotations.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="text-center text-muted py-4">
+                      {totalCount > 0
+                        ? 'No quotations on this page. Use pagination to view other pages, or adjust search/status filters for the current page.'
+                        : 'No quotations match the current filters.'}
+                    </td>
+                  </tr>
+                ) : (
+                  currentQuotations.map((quote) => (
                     <tr key={quote.DocNum} className="align-middle">
                       <td className="fw-bold text-primary">{quote.DocNum}</td>
                       <td>{formatDate(quote.DocDate)}</td>
@@ -423,7 +413,8 @@ const QuotationsTab = ({ customerId }) => {
                         {quote.subject || 'N/A'}
                       </td>
                     </tr>
-                ))}
+                  ))
+                )}
               </tbody>
             </Table>
           </div>
