@@ -88,7 +88,23 @@ import { useRouter } from "next/router";
 import { ReactQuillEditor } from "widgets";
 import Flatpickr from "react-flatpickr";
 import { OverlayTrigger, Tooltip } from "react-bootstrap";
-import { FaAsterisk } from "react-icons/fa";
+
+const RequiredFieldWithTooltip = ({ label }) => (
+  <Form.Label>
+    {label}
+    <OverlayTrigger
+      placement="top"
+      overlay={<Tooltip>This field is required</Tooltip>}
+    >
+      <span
+        className="text-danger"
+        style={{ marginLeft: "4px", cursor: "help" }}
+      >
+        *
+      </span>
+    </OverlayTrigger>
+  </Form.Label>
+);
 
 // Add this helper function at the top of your file
 const sanitizeDataForFirestore = (data) => {
@@ -4083,41 +4099,6 @@ const AddNewJobs = ({ validateJobForm }) => {
 
     initializeCustomer();
   }, [customers, customersLoaded]);
-
-  // Required field indicator component
-  const RequiredField = () => (
-    <OverlayTrigger
-      placement="top"
-      overlay={<Tooltip>This field is required</Tooltip>}
-    >
-      <FaAsterisk
-        style={{
-          color: "red",
-          marginLeft: "4px",
-          fontSize: "8px",
-          verticalAlign: "super",
-        }}
-      />
-    </OverlayTrigger>
-  );
-
-  // Add this component for fields that need tooltips
-  const RequiredFieldWithTooltip = ({ label }) => (
-    <Form.Label>
-      {label}
-      <OverlayTrigger
-        placement="top"
-        overlay={<Tooltip>This field is required</Tooltip>}
-      >
-        <span
-          className="text-danger"
-          style={{ marginLeft: "4px", cursor: "help" }}
-        >
-          *
-        </span>
-      </OverlayTrigger>
-    </Form.Label>
-  );
 
   const initializeJobNo = async () => {
     try {

@@ -94,6 +94,28 @@ import { FlatPickr, FormSelect, DropFiles, ReactQuillEditor } from "widgets";
 import Flatpickr from "react-flatpickr";
 import { OverlayTrigger, Tooltip } from "react-bootstrap";
 
+const RequiredFieldLabel = ({ label, htmlFor, className = "mb-2" }) => (
+  <Form.Label htmlFor={htmlFor} className={className}>
+    {label}
+    <span className="text-danger ms-1" title="This field is required">
+      *
+    </span>
+  </Form.Label>
+);
+
+const FieldHelpIcon = ({ id, children }) => (
+  <OverlayTrigger placement="right" overlay={<Tooltip id={id}>{children}</Tooltip>}>
+    <span
+      tabIndex={0}
+      role="button"
+      className="ms-1 d-inline-flex align-items-center"
+      style={{ cursor: "pointer" }}
+    >
+      <i className="fe fe-help-circle text-muted" />
+    </span>
+  </OverlayTrigger>
+);
+
 // Priority mapping function to convert form values to database values
 // Helper function to format date as DD/MM/YYYY
 const formatDateDDMMYYYY = (date) => {
@@ -4148,28 +4170,6 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
     }
   }, [jobIdProp, initialJobData]);
 
-
-  const RequiredFieldLabel = ({ label, htmlFor, className = "mb-2" }) => (
-    <Form.Label htmlFor={htmlFor} className={className}>
-      {label}
-      <span className="text-danger ms-1" title="This field is required">
-        *
-      </span>
-    </Form.Label>
-  );
-
-  const FieldHelpIcon = ({ id, children }) => (
-    <OverlayTrigger placement="right" overlay={<Tooltip id={id}>{children}</Tooltip>}>
-      <span
-        tabIndex={0}
-        role="button"
-        className="ms-1 d-inline-flex align-items-center"
-        style={{ cursor: "pointer" }}
-      >
-        <i className="fe fe-help-circle text-muted" />
-      </span>
-    </OverlayTrigger>
-  );
 
   // Add unsaved changes warning
   useEffect(() => {
