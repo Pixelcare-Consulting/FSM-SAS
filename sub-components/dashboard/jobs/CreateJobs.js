@@ -18,6 +18,7 @@ import { emitJobStakeholderNotifications } from "../../../lib/notifications/jobS
 import { emitJobAssignmentEmails } from "../../../lib/notifications/transactionalJobEmailClient";
 import { fetchJobStatuses, getDefaultJobStatuses } from "../../../utils/jobStatusSettings";
 import { findJobStatusEntry } from "../../../utils/jobStatusDefaults";
+import { resolveJobStatusForDb } from "../../../lib/jobs/jobStatusPersistence";
 import { findServiceJobContactTypeOption } from "../../../lib/jobs/portalDefaultJobContactType";
 import { normalizeJobTaskNameForInsert } from "../../../lib/jobs/jobTaskFields";
 import {
@@ -159,19 +160,6 @@ const mapPriorityToDatabase = (priority) => {
   };
   
   return priorityMap[priority] || 'MEDIUM';
-};
-
-// Job status: from SAP API (U_JobStatusID numeric) or Settings. Store as-is so DB gets numeric e.g. "554".
-const resolveJobStatusForDb = (formStatus, jobStatusesList) => {
-  const v = formStatus && String(formStatus).trim();
-  if (v) {
-    // If value looks like SAP numeric ID, persist as-is
-    if (/^-?\d+$/.test(v)) return v;
-    const fromList = jobStatusesList?.find((s) => String(s.value || "").trim() === v);
-    if (fromList?.value) return fromList.value;
-    return v.toUpperCase().replace(/\s+/g, "_");
-  }
-  return jobStatusesList?.[0]?.value || "554";
 };
 
 // Helper function to format date as DD/MM/YYYY
@@ -400,7 +388,7 @@ const AddNewJobs = ({ validateJobForm }) => {
       },
     },
     assignedWorkers: {}, // Empty object, will be filled when workers are assigned
-    jobStatus: "554", // SAP Unconfirmed; dropdown from SAP U_API_JOB_STATUS
+    jobStatus: "CREATED", // Portal Created; dropdown prepends Created then SAP U_API_JOB_STATUS
     priority: "Normal", // Default to Normal; options: Low, Normal, High
     startDate: "", // Initialize as empty string instead of null
     endDate: "", // Initialize as empty string instead of null
@@ -490,7 +478,7 @@ const AddNewJobs = ({ validateJobForm }) => {
       },
     },
     assignedWorkers: {}, // Empty object, will be filled when workers are assigned
-    jobStatus: "554", // SAP Unconfirmed; dropdown from SAP U_API_JOB_STATUS
+    jobStatus: "CREATED", // Portal Created; dropdown prepends Created then SAP U_API_JOB_STATUS
     priority: "Normal", // Default to Normal; options: Low, Normal, High
     startDate: "", // Initialize as empty string instead of null
     endDate: "", // Initialize as empty string instead of null
@@ -1116,11 +1104,17 @@ const AddNewJobs = ({ validateJobForm }) => {
         const statuses = await fetchJobStatuses();
         if (mounted && Array.isArray(statuses) && statuses.length > 0) {
           setJobStatuses(statuses);
-          // Default new jobs to Unconfirmed (554). Never Created and never first SAP row (-5 Worker on the Way).
+          // Default new jobs to Created. Never first SAP row (-5). Unconfirmed only if Created is missing.
           setFormData((prev) => {
             const current = String(prev.jobStatus || "").trim().toUpperCase();
-            if (current && current !== "CREATED") {
+            if (current && current !== "CREATED" && current !== "554") {
               return prev;
+            }
+            const createdExtra = statuses.find(
+              (s) => String(s.value || "").trim().toUpperCase() === "CREATED"
+            );
+            if (createdExtra?.value != null && String(createdExtra.value).trim() !== "") {
+              return { ...prev, jobStatus: String(createdExtra.value).trim() };
             }
             const unconfirmed =
               findJobStatusEntry("554", statuses) ||
@@ -1130,7 +1124,7 @@ const AddNewJobs = ({ validateJobForm }) => {
             if (unconfirmed?.value != null && String(unconfirmed.value).trim() !== "") {
               return { ...prev, jobStatus: String(unconfirmed.value).trim() };
             }
-            return { ...prev, jobStatus: "554" };
+            return { ...prev, jobStatus: "CREATED" };
           });
         }
       } finally {
@@ -2956,7 +2950,7 @@ const AddNewJobs = ({ validateJobForm }) => {
             ? `${formData.jobName} (${i + 1}/${jobDates.length})`
             : formData.jobName,
           jobDescription: formData.jobDescription || "",
-          jobStatus: formData.jobStatus || "554",
+          jobStatus: formData.jobStatus || "CREATED",
           priority: formData.priority || "",
 
           // Repeat Job Information

@@ -14,12 +14,15 @@ import {
 } from "../../../lib/scheduler/schedulerQueries";
 import { getListCache, logResponseSize, setListCache } from "../../../lib/supabase/listQueryHelpers";
 import { withApiMetrics } from "../../../lib/api/withApiMetrics";
+import {
+  deleteInFlightSchedulerQuery,
+  getInFlightSchedulerQuery,
+  getSchedulerWindowCacheGeneration,
+  setInFlightSchedulerQuery,
+} from "../../../lib/scheduler/schedulerServerWindowCache";
 
 /** Server-side cache (180s); client WINDOW_DATA_TTL_MS remains 90s in schedulerCache.js */
 const CACHE_TTL_MS = 180000;
-
-/** Per-instance in-flight dedupe to avoid cache stampede on concurrent misses. */
-const inFlightQueries = new Map();
 
 async function loadSchedulerWindowPayload(supabase, {
   rangeStart,
@@ -28,6 +31,7 @@ async function loadSchedulerWindowPayload(supabase, {
   clientDataVersion,
   cacheKey,
 }) {
+  const startedGeneration = getSchedulerWindowCacheGeneration();
   const { technicians, filteredTechnicians, error: techError } =
     await loadSchedulerTechniciansForApi(supabase);
   if (techError) throw techError;
@@ -130,7 +134,9 @@ async function loadSchedulerWindowPayload(supabase, {
     },
   };
 
-  setListCache(cacheKey, payload, CACHE_TTL_MS);
+  if (getSchedulerWindowCacheGeneration() === startedGeneration) {
+    setListCache(cacheKey, payload, CACHE_TTL_MS);
+  }
   return payload;
 }
 
@@ -194,7 +200,7 @@ async function handler(req, res) {
     }
   }
 
-  let inFlight = inFlightQueries.get(cacheKey);
+  let inFlight = getInFlightSchedulerQuery(cacheKey);
   const joinedInFlight = Boolean(inFlight);
   if (!inFlight) {
     const supabase = getSupabaseAdmin();
@@ -205,11 +211,9 @@ async function handler(req, res) {
       clientDataVersion,
       cacheKey,
     }).finally(() => {
-      if (inFlightQueries.get(cacheKey) === inFlight) {
-        inFlightQueries.delete(cacheKey);
-      }
+      deleteInFlightSchedulerQuery(cacheKey, inFlight);
     });
-    inFlightQueries.set(cacheKey, inFlight);
+    setInFlightSchedulerQuery(cacheKey, inFlight);
   }
 
   try {

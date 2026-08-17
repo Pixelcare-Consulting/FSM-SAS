@@ -10,8 +10,11 @@ const DEFAULT_JOB_STATUSES = {
   "616": { name: "Cancelled", value: "616" },
 };
 
-/** Legacy portal values that display/filter as Unconfirmed (554). */
+/** Legacy portal values that display/filter as Unconfirmed (554) when Created is not in the list. */
 const LEGACY_UNCONFIRMED_KEYS = new Set(["CREATED", "PENDING", "UNCONFIRMED"]);
+
+/** Legacy portal values that display/filter as Job Done (-1) when that SAP row exists. */
+const LEGACY_COMPLETED_KEYS = new Set(["COMPLETED", "JOB_COMPLETE", "JOBCOMPLETE"]);
 
 export const getDefaultJobStatuses = () =>
   Object.entries(DEFAULT_JOB_STATUSES).map(([id, s]) => ({ id, ...s }));
@@ -97,13 +100,9 @@ export function formatJobStatusDisplayLabel(text) {
 export const getJobStatusLabelFromList = (statusValue, jobStatusesList) => {
   if (!statusValue) return formatJobStatusDisplayLabel("N/A");
   if (!jobStatusesList?.length) return formatJobStatusDisplayLabel(String(statusValue));
-  const str = String(statusValue).trim();
-  // Match by exact value first (for SAP numeric U_JobStatusID e.g. "554", "-5")
-  const foundExact = jobStatusesList.find((s) => String(s.value || "").trim() === str);
-  if (foundExact?.name) return formatJobStatusDisplayLabel(foundExact.name);
-  const key = str.toUpperCase().replace(/\s+/g, "_");
-  const found = jobStatusesList.find((s) => (s.value || "").toUpperCase().replace(/\s+/g, "_") === key);
-  return formatJobStatusDisplayLabel(found?.name ?? String(statusValue));
+  const found = findJobStatusEntry(statusValue, jobStatusesList);
+  if (found?.name) return formatJobStatusDisplayLabel(found.name);
+  return formatJobStatusDisplayLabel(String(statusValue));
 };
 
 const normStatusKey = (x) => String(x ?? "").trim().toUpperCase().replace(/\s+/g, "_");
@@ -124,11 +123,20 @@ export function findJobStatusEntry(statusValue, jobStatusesList) {
   const byName = jobStatusesList.find((s) => normStatusKey(s.name) === key);
   if (byName) return byName;
 
-  // Legacy CREATED / Created / PENDING → Unconfirmed (554)
+  // Legacy CREATED / Created / PENDING → Unconfirmed (554) when Created extra is absent
   if (LEGACY_UNCONFIRMED_KEYS.has(key)) {
     return (
       jobStatusesList.find((s) => String(s.value ?? "").trim() === "554") ||
       jobStatusesList.find((s) => normStatusKey(s.name) === "UNCONFIRMED") ||
+      null
+    );
+  }
+
+  // Legacy COMPLETED / Job Complete → Job Done (-1) when that SAP row exists
+  if (LEGACY_COMPLETED_KEYS.has(key)) {
+    return (
+      jobStatusesList.find((s) => String(s.value ?? "").trim() === "-1") ||
+      jobStatusesList.find((s) => normStatusKey(s.name) === "JOB_DONE") ||
       null
     );
   }

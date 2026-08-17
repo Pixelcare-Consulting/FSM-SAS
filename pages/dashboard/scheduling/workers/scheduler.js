@@ -463,13 +463,17 @@ function acquireMapIframe(locationKey, embedUrl, frameClassName, title, onLoad) 
 
 function JobDetailLocationPanel({ location, locationParts, styles: s, mapActive = false }) {
   const mapWrapRef = useRef(null);
-  const [iframeLoaded, setIframeLoaded] = useState(false);
   const locationKey = String(location || "").trim();
+  const pooledLoaded = Boolean(
+    locationKey && mapIframePool.get(locationKey)?.dataset?.loaded === "true"
+  );
+  const [iframeLoaded, setIframeLoaded] = useState(pooledLoaded);
+  const [iframeLoadedForKey, setIframeLoadedForKey] = useState(locationKey);
 
-  useEffect(() => {
-    const pooled = locationKey ? mapIframePool.get(locationKey) : null;
-    setIframeLoaded(Boolean(pooled?.dataset?.loaded === "true"));
-  }, [locationKey]);
+  if (iframeLoadedForKey !== locationKey) {
+    setIframeLoadedForKey(locationKey);
+    setIframeLoaded(pooledLoaded);
+  }
 
   useEffect(() => {
     if (!mapActive || !locationKey) return undefined;
@@ -485,12 +489,6 @@ function JobDetailLocationPanel({ location, locationParts, styles: s, mapActive 
       `Map for ${locationKey}`,
       () => setIframeLoaded(true)
     );
-
-    if (iframe.dataset.loaded === "true") {
-      setIframeLoaded(true);
-    } else {
-      setIframeLoaded(false);
-    }
 
     wrap.appendChild(iframe);
 
@@ -606,13 +604,25 @@ function getEventsForDayFromIndex(eventsByTechAndDay, ymd, allowedTechIds) {
 const Scheduler = () => {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState('day');
   const [dateInputValue, setDateInputValue] = useState(() =>
     formatSchedulerDateInputValue(new Date(), "day")
   );
+  const selectedDateMs = selectedDate instanceof Date ? selectedDate.getTime() : 0;
+  const [dateInputSynced, setDateInputSynced] = useState({
+    dateMs: selectedDateMs,
+    viewMode: "day",
+  });
+  if (
+    dateInputSynced.dateMs !== selectedDateMs ||
+    dateInputSynced.viewMode !== viewMode
+  ) {
+    setDateInputSynced({ dateMs: selectedDateMs, viewMode });
+    setDateInputValue(formatSchedulerDateInputValue(selectedDate, viewMode));
+  }
   const [selectedJob, setSelectedJob] = useState(null);
   const [showJobModal, setShowJobModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState('day');
   const includeUndated = viewMode === 'day';
   const schedulerRangeKey = useMemo(() => {
     const range = computeSchedulerFetchRange(viewMode, selectedDate);
@@ -747,10 +757,6 @@ const Scheduler = () => {
 
   const getJobStatusColorFromSettings = (statusValue) => getJobStatusColorFromList(statusValue, jobStatuses);
   const getJobStatusLabelFromSettings = (statusValue) => getJobStatusLabelFromList(statusValue, jobStatuses);
-
-  useEffect(() => {
-    setDateInputValue(formatSchedulerDateInputValue(selectedDate, viewMode));
-  }, [selectedDate, viewMode]);
 
   /* Keep sticky timeline header offset in sync when toolbar wraps (narrow screens) */
   useEffect(() => {
@@ -998,17 +1004,24 @@ const Scheduler = () => {
       });
 
       const hydrated = hydrateSchedulerEvent(updatedEvent, resources);
-      patchEvent({
+      const patched = {
         ...hydrated,
         resourceId: selectedNewTechnician.id,
         technicianId: selectedNewTechnician.id,
-        color: selectedNewTechnician.color || hydrated.color,
-      });
-
-      invalidateSchedulerServerCache();
-
+        color: getJobStatusColorFromSettings(hydrated.jobStatus) || hydrated.color,
+        meta: {
+          ...(hydrated.meta || {}),
+          technicianName:
+            selectedNewTechnician.text ||
+            selectedNewTechnician.name ||
+            hydrated.meta?.technicianName,
+        },
+      };
+      patchEvent(patched);
+      setSelectedJob(patched);
       setShowReassignModal(false);
       setSelectedNewTechnician(null);
+      await invalidateSchedulerServerCache();
     } catch (error) {
       console.error('Reassign error:', error);
       // toast.error(error.message || 'Failed to reassign job');

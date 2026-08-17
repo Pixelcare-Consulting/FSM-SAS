@@ -1598,7 +1598,7 @@ const Settings = () => {
                           onChange={(e) => setNewJobStatusType((prev) => ({ ...prev, value: e.target.value }))}
                         />
                         <Form.Text className="text-muted">
-                          Use SAP status IDs (e.g. 554, 555, 616) so colors overlay those statuses. Extra portal values you add here will not appear in the job dropdown.
+                          Created and In Progress are used in the portal and mobile app only — they sync to SAP as Unconfirmed and Worker on the Way. When a job is finished, use Job Done. Use SAP status IDs (e.g. 554, 555, 616) so colors overlay those statuses.
                         </Form.Text>
                       </Form.Group>
                       <div className="d-flex gap-2 mb-4">
@@ -1781,7 +1781,7 @@ const Settings = () => {
         },
         {
           name: "Job Statuses",
-          description: "Set colors for SAP job status IDs. Extra portal values do not appear in the job dropdown.",
+          description: "Set colors for job statuses. Created and In Progress are portal and mobile only; they sync as Unconfirmed and Worker on the Way. Finished jobs use Job Done.",
           icon: <FaBriefcase className="me-2" />,
           action: "jobstatuses",
         },
@@ -1876,7 +1876,7 @@ const Settings = () => {
       case "followuptasks":
         return "Manage follow-up task types and their status workflows.";
       case "jobstatuses":
-        return "Colors overlay SAP status IDs. Extra portal values will not appear in the job dropdown.";
+        return "Created and In Progress are used in the portal and mobile app. They sync to SAP as Unconfirmed and Worker on the Way. When a job is finished, use Job Done.";
       case "incentives":
         return "Configure hourly incentive rates for technicians.";
       case "notifications":

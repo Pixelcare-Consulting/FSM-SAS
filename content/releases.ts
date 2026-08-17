@@ -10,6 +10,34 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.26.1',
+    date: '2026-08-17',
+    title: 'Finished jobs stay Job Done',
+    notes: [
+      'fix: Finished jobs keep the SAP Job Done status instead of a leftover text code.',
+    ],
+  },
+  {
+    version: '3.26.0',
+    date: '2026-08-17',
+    title: 'Created and In Progress',
+    notes: [
+      'feature: New jobs start as Created again, and starting a job on the mobile app sets it to In Progress.',
+      'improvement: Created and In Progress stay in the portal and mobile app. SAP still receives Unconfirmed and Worker on the Way. Finished jobs use Job Done.',
+      'fix: Editing a Created job no longer switches it to Unconfirmed.',
+    ],
+  },
+  {
+    version: '3.25.0',
+    date: '2026-08-17',
+    title: 'Scheduler reassign stays put',
+    notes: [
+      'feature: Reassigning a worker on the schedule updates the board and the open job right away.',
+      'improvement: You can change the same job to another worker more than once without closing it — the assigned person stays in sync.',
+      'fix: After you reassign a job, the card no longer jumps back to the previous worker a few seconds later.',
+    ],
+  },
+  {
     version: '3.24.0',
     date: '2026-08-17',
     title: 'Job status matches SAP',

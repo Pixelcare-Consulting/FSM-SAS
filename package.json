@@ -1,6 +1,6 @@
 {
   "name": "sas-sapb1-portal",
-  "version": "3.24.0",
+  "version": "3.26.1",
   "private": true,
   "packageManager": "pnpm@10.8.0",
   "scripts": {
@@ -15,6 +15,7 @@
     "test:availability": "node tests/availability.test.mjs",
     "test:scheduler-address": "node tests/schedulerJobAddress.test.mjs",
     "test:job-status-filter": "node tests/jobStatusFilter.test.mjs",
+    "test:job-status-persistence": "node tests/jobStatusPersistence.test.mjs",
     "test:job-list-search": "node tests/jobListSearch.test.mjs",
     "test:location-active-filter": "node tests/filterActiveLocationOptions.test.mjs",
     "test:manual": "echo 'See tests/manual-test-checklist.md for manual testing steps'",

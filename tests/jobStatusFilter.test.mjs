@@ -5,13 +5,78 @@ import {
   applyJobStatusFilter,
   getJobStatusFilterDbValues,
 } from '../lib/jobs/jobStatusFilter.js';
-import { getDefaultJobStatuses } from '../utils/jobStatusDefaults.js';
+import { buildSapStatusIndex, resolveLegacyStatusToSapId } from '../lib/jobs/resolveLegacyJobStatusToSap.js';
+import { getDefaultJobStatuses, getJobStatusLabelFromList } from '../utils/jobStatusDefaults.js';
 
 const sapStatuses = [
   { value: '554', name: 'Unconfirmed' },
   { value: '555', name: 'Confirmed' },
   { value: '-5', name: 'Cancelled' },
 ];
+
+const sapWithJobDone = [
+  { value: '554', name: 'Unconfirmed' },
+  { value: '-5', name: 'Worker on the Way' },
+  { value: '-1', name: 'Job Done' },
+];
+
+const mergedWithExtras = buildJobStatusesList({
+  sapRows: sapWithJobDone,
+});
+assert.equal(mergedWithExtras[0]?.value, 'CREATED', 'prepends Created extra');
+assert.equal(mergedWithExtras[1]?.value, 'IN_PROGRESS', 'prepends In Progress extra');
+assert.ok(
+  mergedWithExtras.some((row) => String(row.value) === '-1'),
+  'SAP Job Done remains in the list'
+);
+assert.equal(
+  mergedWithExtras.some((row) => String(row.value).toUpperCase() === 'COMPLETED'),
+  false,
+  'does not add Completed extra'
+);
+assert.equal(
+  mergedWithExtras.some((row) => String(row.value).toUpperCase() === 'SCHEDULED'),
+  false,
+  'does not add Scheduled extra'
+);
+
+assert.equal(
+  getJobStatusLabelFromList('COMPLETED', mergedWithExtras),
+  'Job Done',
+  'legacy COMPLETED displays as Job Done'
+);
+assert.equal(
+  getJobStatusLabelFromList('CREATED', mergedWithExtras),
+  'Created',
+  'CREATED displays as Created extra, not Unconfirmed'
+);
+
+const createdFilter = getJobStatusFilterDbValues('CREATED', mergedWithExtras);
+assert.ok(createdFilter.includes('CREATED'), 'Created filter includes CREATED');
+assert.ok(createdFilter.includes('554'), 'Created filter also matches old 554 rows');
+
+const inProgressFilter = getJobStatusFilterDbValues('IN_PROGRESS', mergedWithExtras);
+assert.ok(inProgressFilter.includes('IN_PROGRESS'), 'In Progress filter includes IN_PROGRESS');
+assert.ok(inProgressFilter.includes('-5'), 'In Progress filter also matches -5');
+
+const jobDoneFilter = getJobStatusFilterDbValues('-1', mergedWithExtras);
+assert.ok(jobDoneFilter.includes('-1'), 'Job Done filter includes -1');
+assert.ok(jobDoneFilter.includes('COMPLETED'), 'Job Done filter also matches legacy COMPLETED');
+
+const sapIndex = buildSapStatusIndex([
+  { U_JobStatusID: '554', U_JobStatus: 'Unconfirmed' },
+  { U_JobStatusID: '-5', U_JobStatus: 'Worker on the Way' },
+  { U_JobStatusID: '-1', U_JobStatus: 'Job Done' },
+]);
+const createdResolved = resolveLegacyStatusToSapId('CREATED', sapIndex);
+assert.equal(createdResolved.kind, 'matched');
+assert.equal(createdResolved.id, '554', 'CREATED syncs as Unconfirmed 554');
+const inProgressResolved = resolveLegacyStatusToSapId('IN_PROGRESS', sapIndex);
+assert.equal(inProgressResolved.kind, 'matched');
+assert.equal(inProgressResolved.id, '-5', 'IN_PROGRESS syncs as Worker on the Way -5');
+const completedResolved = resolveLegacyStatusToSapId('COMPLETED', sapIndex);
+assert.equal(completedResolved.kind, 'matched');
+assert.equal(completedResolved.id, '-1', 'COMPLETED syncs as Job Done -1');
 
 // Filter by SAP id must also match legacy UNCONFIRMED rows in jobs.status.
 const unconfirmedValues = getJobStatusFilterDbValues('554', sapStatuses);
@@ -41,6 +106,10 @@ assert.ok(
 assert.ok(
   settingsMergedList.some((row) => String(row.value) === '554'),
   'merged list includes SAP id 554'
+);
+assert.ok(
+  settingsMergedList.some((row) => String(row.value) === 'CREATED'),
+  'merged list prepends Created extra'
 );
 
 // applyJobStatusFilter builds multi-value OR for aliases.

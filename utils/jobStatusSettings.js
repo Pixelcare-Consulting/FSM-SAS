@@ -32,7 +32,7 @@ let fetchJobStatusesInFlight = null;
 
 /**
  * Fetch job statuses: SAP U_API_JOB_STATUS is the source of truth (ID + label).
- * Settings overlay color only (matched by SAP ID or SAP label). Portal-only extras are not appended.
+ * Settings overlay color only (matched by SAP ID or SAP label). Created and In Progress are prepended as portal-only extras.
  */
 export const fetchJobStatuses = async ({ force = false } = {}) => {
   if (!force && isJobStatusesCacheFresh()) {
