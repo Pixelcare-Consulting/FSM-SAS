@@ -30,24 +30,9 @@ export {
 
 let fetchJobStatusesInFlight = null;
 
-function settingsTypesToList(settingsTypes) {
-  if (!settingsTypes || typeof settingsTypes !== "object" || Object.keys(settingsTypes).length === 0) {
-    return [];
-  }
-  return Object.entries(settingsTypes)
-    .map(([id, type]) => ({
-      id,
-      value: type.value ?? "",
-      name: type.name ?? "",
-      ...(type.color != null && String(type.color).trim() !== "" ? { color: type.color } : {}),
-    }))
-    .filter((s) => s.value !== undefined && s.value !== null && String(s.value).trim() !== "");
-}
-
 /**
- * Fetch job statuses: try SAP API (U_API_JOB_STATUS) first, then merge in Settings overrides.
- * Settings (Dashboard > Job Statuses) override name and color per status so you control colors.
- * Settings-only entries (extra values not returned by SAP) are appended unless the label already exists on an API row (avoids duplicate Confirmed/Unconfirmed/Cancelled, etc.).
+ * Fetch job statuses: SAP U_API_JOB_STATUS is the source of truth (ID + label).
+ * Settings overlay color only (matched by SAP ID or SAP label). Portal-only extras are not appended.
  */
 export const fetchJobStatuses = async ({ force = false } = {}) => {
   if (!force && isJobStatusesCacheFresh()) {
@@ -58,8 +43,6 @@ export const fetchJobStatuses = async ({ force = false } = {}) => {
   if (fetchJobStatusesInFlight) return fetchJobStatusesInFlight;
 
   fetchJobStatusesInFlight = (async () => {
-    const { getDefaultJobStatuses } = await import("./jobStatusDefaults");
-
     let settingsTypes = null;
     let sapSnapshot = null;
     try {
@@ -87,12 +70,12 @@ export const fetchJobStatuses = async ({ force = false } = {}) => {
       console.warn("Job statuses settings fetch failed:", e?.message);
     }
 
-    const snapshotList =
-      sapSnapshot?.length > 0
-        ? buildJobStatusesList({ settingsTypes, sapRows: sapSnapshot })
-        : [];
+    const snapshotList = buildJobStatusesList({
+      settingsTypes,
+      sapRows: sapSnapshot || [],
+    });
 
-    if (!force && snapshotList.length > 0 && isJobStatusesCacheFresh()) {
+    if (!force && sapSnapshot?.length > 0 && isJobStatusesCacheFresh()) {
       writeCachedJobStatuses(snapshotList);
       return snapshotList;
     }
@@ -101,25 +84,24 @@ export const fetchJobStatuses = async ({ force = false } = {}) => {
       const res = await fetch("/api/getJobStatus", { method: "GET", credentials: "include" });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          const apiList = buildJobStatusesList({ settingsTypes, sapRows: data });
-          if (apiList.length > 0) {
-            writeCachedJobStatuses(apiList);
-            return apiList;
-          }
+        const apiList = buildJobStatusesList({
+          settingsTypes,
+          sapRows: Array.isArray(data) ? data : [],
+          sapSnapshot: sapSnapshot || [],
+        });
+        if (apiList.length > 0) {
+          writeCachedJobStatuses(apiList);
+          return apiList;
         }
       }
     } catch (err) {
-      console.warn("Job statuses from API failed, falling back to settings:", err?.message);
+      console.warn("Job statuses from API failed, falling back to snapshot/defaults:", err?.message);
     }
 
     if (snapshotList.length > 0) {
       writeCachedJobStatuses(snapshotList);
       return snapshotList;
     }
-
-    const fromSettings = settingsTypesToList(settingsTypes);
-    if (fromSettings.length > 0) return fromSettings;
 
     return getDefaultJobStatuses();
   })();

@@ -30,6 +30,28 @@ import { useSettings } from "../../contexts/SettingsContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { invalidateSettingsCachesClient } from "../../utils/invalidateSettingsCachesClient";
 
+async function upsertJobStatusTypes(supabase, updatedTypes) {
+  const { data: existing, error: readError } = await supabase
+    .from("settings")
+    .select("value")
+    .eq("id", "jobStatuses")
+    .maybeSingle();
+  if (readError) throw readError;
+  const existingValue = existing?.value && typeof existing.value === "object" ? existing.value : {};
+  const sapSnapshot = Array.isArray(existingValue.sapSnapshot) ? existingValue.sapSnapshot : [];
+  return supabase.from("settings").upsert(
+    {
+      id: "jobStatuses",
+      value: {
+        ...existingValue,
+        types: updatedTypes,
+        sapSnapshot,
+      },
+    },
+    { onConflict: "id" }
+  );
+}
+
 const Settings = () => {
   const router = useRouter();
   const { setLogo } = useLogo(); // Get setLogo from LogoContext
@@ -1563,7 +1585,7 @@ const Settings = () => {
                       <Form.Group className="mb-3">
                         <Form.Control
                           type="text"
-                          placeholder="Enter status name (e.g. Created)"
+                          placeholder="Enter status name (e.g. Unconfirmed)"
                           value={newJobStatusType.name}
                           onChange={(e) => setNewJobStatusType((prev) => ({ ...prev, name: e.target.value }))}
                         />
@@ -1571,12 +1593,12 @@ const Settings = () => {
                       <Form.Group className="mb-2">
                         <Form.Control
                           type="text"
-                          placeholder="DB value (e.g. CREATED or 554 for SAP)"
+                          placeholder="SAP status ID (e.g. 554)"
                           value={newJobStatusType.value}
                           onChange={(e) => setNewJobStatusType((prev) => ({ ...prev, value: e.target.value }))}
                         />
                         <Form.Text className="text-muted">
-                          Use SAP status ID (e.g. 554, 555, -5) to control name and color for that status in Create/Edit Job.
+                          Use SAP status IDs (e.g. 554, 555, 616) so colors overlay those statuses. Extra portal values you add here will not appear in the job dropdown.
                         </Form.Text>
                       </Form.Group>
                       <div className="d-flex gap-2 mb-4">
@@ -1669,7 +1691,7 @@ const Settings = () => {
   });
 
   // Job statuses settings (custom statuses with colors for Create/Edit Job)
-  const [jobStatusSettings, setJobStatusSettings] = useState({ types: {} });
+  const [jobStatusSettings, setJobStatusSettings] = useState({ types: {}, sapSnapshot: [] });
   const [newJobStatusType, setNewJobStatusType] = useState({
     name: "",
     color: "#3b82f6",
@@ -1759,7 +1781,7 @@ const Settings = () => {
         },
         {
           name: "Job Statuses",
-          description: "Manage job statuses with custom names and colors",
+          description: "Set colors for SAP job status IDs. Extra portal values do not appear in the job dropdown.",
           icon: <FaBriefcase className="me-2" />,
           action: "jobstatuses",
         },
@@ -1854,7 +1876,7 @@ const Settings = () => {
       case "followuptasks":
         return "Manage follow-up task types and their status workflows.";
       case "jobstatuses":
-        return "Manage job statuses with custom names and colors for the Create/Edit Job form.";
+        return "Colors overlay SAP status IDs. Extra portal values will not appear in the job dropdown.";
       case "incentives":
         return "Configure hourly incentive rates for technicians.";
       case "notifications":
@@ -2171,7 +2193,12 @@ const Settings = () => {
 
   useEffect(() => {
     if (bundleSettings.jobStatuses?.types) {
-      setJobStatusSettings({ types: bundleSettings.jobStatuses.types });
+      setJobStatusSettings({
+        types: bundleSettings.jobStatuses.types,
+        sapSnapshot: Array.isArray(bundleSettings.jobStatuses.sapSnapshot)
+          ? bundleSettings.jobStatuses.sapSnapshot
+          : [],
+      });
       return;
     }
 
@@ -2183,7 +2210,7 @@ const Settings = () => {
           { name: s.name, color: s.color ?? '#3b82f6', value: s.value },
         ])
       );
-      setJobStatusSettings({ types: typesObj });
+      setJobStatusSettings({ types: typesObj, sapSnapshot: [] });
     }
   }, [bundleSettings.jobStatuses, bundleSettings.isLoading]);
 
@@ -2354,7 +2381,7 @@ const Settings = () => {
     try {
       setIsSaving(true);
       if (!newJobStatusType.name.trim() || !newJobStatusType.value.trim()) {
-        toast.error('Please enter both status name and value (e.g. CREATED)');
+        toast.error('Please enter both status name and value (e.g. 554)');
         return;
       }
 
@@ -2372,9 +2399,7 @@ const Settings = () => {
         }
       };
 
-      const { error } = await supabase
-        .from('settings')
-        .upsert({ id: 'jobStatuses', value: { types: updatedTypes } }, { onConflict: 'id' });
+      const { error } = await upsertJobStatusTypes(supabase, updatedTypes);
 
       if (error) throw error;
 
@@ -2406,9 +2431,7 @@ const Settings = () => {
       const updatedTypes = { ...(jobStatusSettings.types || {}) };
       delete updatedTypes[typeId];
 
-      const { error } = await supabase
-        .from('settings')
-        .upsert({ id: 'jobStatuses', value: { types: updatedTypes } }, { onConflict: 'id' });
+      const { error } = await upsertJobStatusTypes(supabase, updatedTypes);
 
       if (error) throw error;
 
@@ -2447,9 +2470,7 @@ const Settings = () => {
         }
       };
 
-      const { error } = await supabase
-        .from('settings')
-        .upsert({ id: 'jobStatuses', value: { types: updatedTypes } }, { onConflict: 'id' });
+      const { error } = await upsertJobStatusTypes(supabase, updatedTypes);
 
       if (error) throw error;
 

@@ -83,7 +83,7 @@ export default async function handler(req, res) {
       job_title = null,
       job_description = null,
       priority = 'MEDIUM',
-      status = 'CREATED'
+      status = '554'
     } = req.body;
 
     if (!leadId) {

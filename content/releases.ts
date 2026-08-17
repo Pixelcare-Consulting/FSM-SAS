@@ -10,6 +10,16 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.24.0',
+    date: '2026-08-17',
+    title: 'Job status matches SAP',
+    notes: [
+      'feature: New jobs now start as Unconfirmed — the same starting status used in SAP.',
+      'improvement: Job status lists on create, edit, and filters now match SAP. Extra portal options such as Created, Scheduled, and In Progress no longer appear.',
+      'fix: Saving job status colors in Settings no longer drops the SAP status list.',
+    ],
+  },
+  {
     version: '3.23.0',
     date: '2026-08-17',
     title: 'Create portal customer codes',

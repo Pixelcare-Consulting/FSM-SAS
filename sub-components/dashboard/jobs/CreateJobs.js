@@ -400,7 +400,7 @@ const AddNewJobs = ({ validateJobForm }) => {
       },
     },
     assignedWorkers: {}, // Empty object, will be filled when workers are assigned
-    jobStatus: "CREATED", // DB value; options from Settings > Job Statuses
+    jobStatus: "554", // SAP Unconfirmed; dropdown from SAP U_API_JOB_STATUS
     priority: "Normal", // Default to Normal; options: Low, Normal, High
     startDate: "", // Initialize as empty string instead of null
     endDate: "", // Initialize as empty string instead of null
@@ -490,7 +490,7 @@ const AddNewJobs = ({ validateJobForm }) => {
       },
     },
     assignedWorkers: {}, // Empty object, will be filled when workers are assigned
-    jobStatus: "CREATED", // DB value; options from Settings > Job Statuses
+    jobStatus: "554", // SAP Unconfirmed; dropdown from SAP U_API_JOB_STATUS
     priority: "Normal", // Default to Normal; options: Low, Normal, High
     startDate: "", // Initialize as empty string instead of null
     endDate: "", // Initialize as empty string instead of null
@@ -1116,20 +1116,21 @@ const AddNewJobs = ({ validateJobForm }) => {
         const statuses = await fetchJobStatuses();
         if (mounted && Array.isArray(statuses) && statuses.length > 0) {
           setJobStatuses(statuses);
-          // Default new jobs to "Created" (match list value: CREATED or settings/SAP row named Created), not first API row (often "Worker on the Way").
+          // Default new jobs to Unconfirmed (554). Never Created and never first SAP row (-5 Worker on the Way).
           setFormData((prev) => {
-            if (String(prev.jobStatus || "").trim().toUpperCase() !== "CREATED") {
+            const current = String(prev.jobStatus || "").trim().toUpperCase();
+            if (current && current !== "CREATED") {
               return prev;
             }
-            const created =
-              findJobStatusEntry("CREATED", statuses) ||
+            const unconfirmed =
+              findJobStatusEntry("554", statuses) ||
               statuses.find(
-                (s) => String(s.name || "").trim().toLowerCase() === "created"
+                (s) => String(s.name || "").trim().toLowerCase() === "unconfirmed"
               );
-            if (created?.value != null && String(created.value).trim() !== "") {
-              return { ...prev, jobStatus: String(created.value).trim() };
+            if (unconfirmed?.value != null && String(unconfirmed.value).trim() !== "") {
+              return { ...prev, jobStatus: String(unconfirmed.value).trim() };
             }
-            return prev;
+            return { ...prev, jobStatus: "554" };
           });
         }
       } finally {
@@ -2955,7 +2956,7 @@ const AddNewJobs = ({ validateJobForm }) => {
             ? `${formData.jobName} (${i + 1}/${jobDates.length})`
             : formData.jobName,
           jobDescription: formData.jobDescription || "",
-          jobStatus: formData.jobStatus || "CREATED",
+          jobStatus: formData.jobStatus || "554",
           priority: formData.priority || "",
 
           // Repeat Job Information

@@ -5,20 +5,18 @@
  */
 
 const DEFAULT_JOB_STATUSES = {
-  created: { name: "Created", value: "CREATED" },
-  unconfirmed: { name: "Unconfirmed", value: "UNCONFIRMED" },
-  confirmed: { name: "Confirmed", value: "CONFIRMED" },
-  inprogress: { name: "In Progress", value: "IN_PROGRESS" },
-  completed: { name: "Completed", value: "COMPLETED" },
-  scheduled: { name: "Scheduled", value: "SCHEDULED" },
-  rescheduled: { name: "Rescheduled", value: "RESCHEDULED" },
-  cancelled: { name: "Cancelled", value: "CANCELLED" },
+  "554": { name: "Unconfirmed", value: "554" },
+  "555": { name: "Confirmed", value: "555" },
+  "616": { name: "Cancelled", value: "616" },
 };
+
+/** Legacy portal values that display/filter as Unconfirmed (554). */
+const LEGACY_UNCONFIRMED_KEYS = new Set(["CREATED", "PENDING", "UNCONFIRMED"]);
 
 export const getDefaultJobStatuses = () =>
   Object.entries(DEFAULT_JOB_STATUSES).map(([id, s]) => ({ id, ...s }));
 
-const JOB_STATUS_CACHE_KEY = "fsm_job_statuses_cache_v1";
+const JOB_STATUS_CACHE_KEY = "fsm_job_statuses_cache_v2";
 export const JOB_STATUS_CACHE_TTL_MS = 15 * 60 * 1000;
 
 /** Last fetched Settings/SAP status list — instant colors on scheduler revisit. */
@@ -123,7 +121,18 @@ export function findJobStatusEntry(statusValue, jobStatusesList) {
   const key = normStatusKey(str);
   const byVal = jobStatusesList.find((s) => normStatusKey(s.value) === key);
   if (byVal) return byVal;
-  return jobStatusesList.find((s) => normStatusKey(s.name) === key) ?? null;
+  const byName = jobStatusesList.find((s) => normStatusKey(s.name) === key);
+  if (byName) return byName;
+
+  // Legacy CREATED / Created / PENDING → Unconfirmed (554)
+  if (LEGACY_UNCONFIRMED_KEYS.has(key)) {
+    return (
+      jobStatusesList.find((s) => String(s.value ?? "").trim() === "554") ||
+      jobStatusesList.find((s) => normStatusKey(s.name) === "UNCONFIRMED") ||
+      null
+    );
+  }
+  return null;
 }
 
 /**
