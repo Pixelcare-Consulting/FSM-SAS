@@ -10,6 +10,14 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.23.0',
+    date: '2026-08-17',
+    title: 'Create portal customer codes',
+    notes: [
+      'fix: Adding a portal customer no longer fails when the system assigns the next customer code.',
+    ],
+  },
+  {
     version: '3.22.0',
     date: '2026-08-12',
     title: 'Mark Job Messages unread',
