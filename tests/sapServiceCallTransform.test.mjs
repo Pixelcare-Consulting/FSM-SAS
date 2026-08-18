@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {
   buildServiceCallActivityLine,
   buildServiceCallPatchBody,
+  deriveInvoiceStatusFlag,
   findServiceCallActivityLine,
+  hasRealSapInvoiceNumber,
   mergeServiceCallActivityCollection,
   pickStoredServiceCallActivityLine,
 } from '../lib/utils/sapServiceCallTransform.js';
@@ -99,6 +101,48 @@ const stored = pickStoredServiceCallActivityLine({
 });
 assert.equal(stored.U_API_Tech, 'A3KeeDinNg,0CSO0MookJinBong');
 assert.equal(stored.StartDate, undefined);
+
+const qrUsesJobNumber = {
+  sap_activity_id: 33547,
+  job_number: '2026-000090',
+  status: 'JOB_COMPLETE',
+  payment_qr_inv_number: '2026-000090',
+};
+assert.equal(hasRealSapInvoiceNumber(qrUsesJobNumber), false);
+assert.equal(deriveInvoiceStatusFlag(qrUsesJobNumber, []), 'NI');
+const qrJobLine = buildServiceCallActivityLine({
+  job: qrUsesJobNumber,
+  poNumber: null,
+  technicianJobs: [],
+  lineNum: 16,
+  jobStatus: { jobStatusId: '-1', jobStatusLabel: 'Job Done' },
+});
+assert.equal(qrJobLine.U_JobStatus, 'NI', 'job-number QR ref stays not invoiced');
+assert.equal(qrJobLine.U_InvNumber, undefined, 'does not send job number as U_InvNumber');
+
+const qrJobNumberCase = {
+  ...qrUsesJobNumber,
+  payment_qr_inv_number: ' 2026-000090 ',
+};
+assert.equal(hasRealSapInvoiceNumber(qrJobNumberCase), false);
+
+const realInvoiceJob = {
+  sap_activity_id: 33547,
+  job_number: '2026-000090',
+  status: 'JOB_COMPLETE',
+  payment_qr_inv_number: '9008910',
+};
+assert.equal(hasRealSapInvoiceNumber(realInvoiceJob), true);
+assert.equal(deriveInvoiceStatusFlag(realInvoiceJob, []), 'I');
+const realInvLine = buildServiceCallActivityLine({
+  job: realInvoiceJob,
+  poNumber: null,
+  technicianJobs: [],
+  lineNum: 16,
+  jobStatus: { jobStatusId: '-1', jobStatusLabel: 'Job Done' },
+});
+assert.equal(realInvLine.U_JobStatus, 'I');
+assert.equal(realInvLine.U_InvNumber, '9008910');
 
 assert.equal(formatAuditValueEmptyObject({}), '—', 'empty audit objects display as em dash, not {}');
 assert.equal(

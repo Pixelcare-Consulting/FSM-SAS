@@ -10,6 +10,14 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.30.3',
+    date: '2026-08-18',
+    title: 'Finished jobs stay on the invoice list',
+    notes: [
+      'fix: Finished jobs stay on the SAP invoice list until a real invoice number is posted, not when the job number is used on the payment QR',
+    ],
+  },
+  {
     version: '3.30.2',
     date: '2026-08-18',
     title: 'Job already on the service call',
