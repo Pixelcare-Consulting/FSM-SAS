@@ -10,6 +10,14 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.29.1',
+    date: '2026-08-18',
+    title: 'Job contact details stay visible',
+    notes: [
+      'fix: Job details keep the customer contact person, phone, and email after the page updates in the background',
+    ],
+  },
+  {
     version: '3.29.0',
     date: '2026-08-18',
     title: 'Scheduler keeps your date',

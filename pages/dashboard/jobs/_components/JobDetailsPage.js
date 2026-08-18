@@ -2,7 +2,10 @@ import { useRouter } from "next/router";
 import { useEffect, useState, Fragment, useRef, useCallback, useMemo, useSyncExternalStore } from "react";
 import { useQueryClient } from "react-query";
 import { getSupabaseClient } from "../../../../lib/supabase/client";
-import { pickMasterlistContactRow } from "../../../../lib/jobs/pickMasterlistSiteContact";
+import {
+  getJobContactDisplayFields,
+  mergeJobHeaderFromRow,
+} from "../../../../lib/jobs/jobDetailHelpers";
 import { sanitizeJobTaskFields } from '../../../../lib/jobs/sanitizeJobTaskFields';
 import { jobService, followUpService, jobMediaService } from "../../../../lib/supabase/database";
 import { emitFollowUpStakeholderNotifications } from "../../../../lib/notifications/jobStakeholderNotificationsClient";
@@ -311,33 +314,6 @@ const getLatestAttendanceForTechnicianJob = (attendanceRows, technicianJobId, te
 const JOB_REALTIME_DEBOUNCE_MS = 2500;
 const JOB_REALTIME_FULL_REFETCH_MIN_MS = 30_000;
 
-/** Merge flat jobs-row realtime payload without dropping nested relations. */
-const mergeJobHeaderFromRow = (prevJob, row) => {
-  if (!prevJob || !row) return prevJob;
-  return {
-    ...prevJob,
-    ...row,
-    jobNo: row.job_number ?? prevJob.jobNo,
-    jobName: row.title ?? prevJob.jobName,
-    jobStatus: row.status ?? prevJob.jobStatus,
-    jobType: row.category ?? prevJob.jobType,
-    jobDescription: row.description ?? prevJob.jobDescription,
-    description: row.description ?? prevJob.description,
-    technician_jobs: prevJob.technician_jobs,
-    job_tasks: prevJob.job_tasks,
-    job_equipments: prevJob.job_equipments,
-    taskList: prevJob.taskList,
-    customer: prevJob.customer,
-    // Clear nested objects when FKs were nulled so Job View does not re-show removed location/contact
-    location: row.location_id === null ? null : prevJob.location,
-    service_call: prevJob.service_call,
-    sales_order: prevJob.sales_order,
-    contact: row.contact_id === null ? null : prevJob.contact,
-    payment_profile: prevJob.payment_profile,
-    created_by_user: prevJob.created_by_user,
-  };
-};
-
 const CSO_CLOCK_TICK_MS = 60_000;
 let csoClockNowMs = 0;
 let csoClockTimer = null;
@@ -589,31 +565,6 @@ const getCountryCode = (country) => {
   };
   
   return countryMap[country.toLowerCase()] || country;
-};
-
-/** Masterlist stores "-" as placeholder when splitting names in PATCH handlers. */
-const stripMasterlistNamePlaceholder = (s) => {
-  const t = String(s || "").trim();
-  if (t === "-" || t === "—") return "";
-  return t;
-};
-
-const mapMasterlistContactToJobContact = (contact) => {
-  if (!contact) return null;
-  const fn = stripMasterlistNamePlaceholder(contact.first_name);
-  const mn = stripMasterlistNamePlaceholder(contact.middle_name);
-  const ln = stripMasterlistNamePlaceholder(contact.last_name);
-  const full = [fn, mn, ln].filter(Boolean).join(" ").trim();
-  return {
-    contactID: contact.id,
-    contactFullname: full,
-    firstName: fn || undefined,
-    middleName: mn || undefined,
-    lastName: ln || undefined,
-    phoneNumber: contact.tel1 != null ? String(contact.tel1).trim() : "",
-    mobilePhone: contact.tel2 != null ? String(contact.tel2).trim() : "",
-    email: contact.email != null ? String(contact.email).trim() : "",
-  };
 };
 
 /** Same strings the map can geocode: schedule row, then customer site, then job-linked location. */
@@ -1303,23 +1254,7 @@ const JobDetails = () => {
       try {
         const jobData = await jobService.findHeaderById(jobUuid);
         if (jobData) {
-          setJob((prevJob) => {
-            if (!prevJob) return prevJob;
-            return {
-              ...prevJob,
-              ...jobData,
-              jobNo: jobData.job_number || prevJob.jobNo,
-              jobName: jobData.title || prevJob.jobName,
-              jobStatus: jobData.status || prevJob.jobStatus,
-              jobType: jobData.category || prevJob.jobType,
-              jobDescription: jobData.description ?? prevJob.jobDescription,
-              description: jobData.description ?? prevJob.description,
-              technician_jobs: prevJob.technician_jobs,
-              job_tasks: prevJob.job_tasks,
-              job_equipments: prevJob.job_equipments,
-              taskList: prevJob.taskList,
-            };
-          });
+          setJob((prevJob) => mergeJobHeaderFromRow(prevJob, jobData));
         }
       } catch (error) {
         console.error("Error updating job header:", error);
@@ -4529,6 +4464,8 @@ const JobDetails = () => {
     );
   }
 
+  const contactDisplay = getJobContactDisplayFields(job.contact);
+
   const handleCreateFollowUp = async (followUpData) => {
     try {
       const supabase = getSupabaseClient();
@@ -5760,7 +5697,7 @@ const JobDetails = () => {
                             Contact Person
                           </div>
                           <div className={styles.infoValue}>
-                            {job.contact?.contactFullname || 'Not specified'}
+                            {contactDisplay.name || 'Not specified'}
                           </div>
                         </div>
 
@@ -5771,10 +5708,10 @@ const JobDetails = () => {
                             Office Phone
                           </div>
                           <div className={styles.infoValue}>
-                            {job.contact?.phoneNumber ? (
+                            {contactDisplay.officePhone ? (
                               <div className={styles.contactActions}>
                                 {(() => {
-                                  const row = phoneLinkRow(job.contact.phoneNumber);
+                                  const row = phoneLinkRow(contactDisplay.officePhone);
                                   return (
                                     <>
                                       <span>{row.label}</span>
@@ -5815,10 +5752,10 @@ const JobDetails = () => {
                             Mobile Phone
                           </div>
                           <div className={styles.infoValue}>
-                            {job.contact?.mobilePhone ? (
+                            {contactDisplay.mobilePhone ? (
                               <div className={styles.contactActions}>
                                 {(() => {
-                                  const row = phoneLinkRow(job.contact.mobilePhone);
+                                  const row = phoneLinkRow(contactDisplay.mobilePhone);
                                   return (
                                     <>
                                       <span>{row.label}</span>
@@ -5853,20 +5790,20 @@ const JobDetails = () => {
                         </div>
 
                         {/* Email */}
-                        {job.contact?.email && (
-                          <div className={styles.infoItem}>
-                            <div className={styles.infoLabel}>
-                              <Envelope size={14} className={styles.infoIcon} />
-                              Email
-                            </div>
-                            <div className={styles.infoValue}>
+                        <div className={styles.infoItem}>
+                          <div className={styles.infoLabel}>
+                            <Envelope size={14} className={styles.infoIcon} />
+                            Email
+                          </div>
+                          <div className={styles.infoValue}>
+                            {contactDisplay.email ? (
                               <div className={styles.contactActions}>
-                                <span>{job.contact.email}</span>
+                                <span>{contactDisplay.email}</span>
                                 <div className={styles.actionButtons}>
                                   <a
-                                    href={`mailto:${job.contact.email}`}
+                                    href={`mailto:${contactDisplay.email}`}
                                     className={styles.actionIcon}
-                                    title={`Email ${job.contact.email}`}
+                                    title={`Email ${contactDisplay.email}`}
                                   >
                                     <Envelope size={14} />
                                   </a>
@@ -5887,9 +5824,11 @@ const JobDetails = () => {
                                   </OverlayTrigger>
                                 </div>
                               </div>
-                            </div>
+                            ) : (
+                              'Not specified'
+                            )}
                           </div>
-                        )}
+                        </div>
 
                         {/* Location */}
                         <div className={styles.infoItem}>
