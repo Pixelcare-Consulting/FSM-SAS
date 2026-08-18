@@ -10,6 +10,31 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.30.6',
+    date: '2026-08-18',
+    title: 'Create Job still loads service calls',
+    notes: [
+      'fix: Create Job still shows Service Calls when the SAP login has timed out, including saved open calls',
+    ],
+  },
+  {
+    version: '3.30.5',
+    date: '2026-08-18',
+    title: 'Edit Job shows saved numbers',
+    notes: [
+      "fix: Edit Job shows the job's Service Call and Sales Order right away, including on finished jobs",
+    ],
+  },
+  {
+    version: '3.30.4',
+    date: '2026-08-18',
+    title: 'Jobs stay ready to invoice',
+    notes: [
+      'fix: Saving a job keeps it not invoiced so you can invoice it in Document Automation',
+      'fix: Job schedule in SAP is updated in place instead of adding extra rows each save',
+    ],
+  },
+  {
     version: '3.30.3',
     date: '2026-08-18',
     title: 'Finished jobs stay on the invoice list',

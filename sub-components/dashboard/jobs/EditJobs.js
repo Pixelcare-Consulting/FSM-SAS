@@ -1,6 +1,7 @@
 import React, {
   useState,
   useEffect,
+  useLayoutEffect,
   useCallback,
   useMemo,
   useRef,
@@ -504,6 +505,35 @@ async function buildSavedServiceCallOption(serviceCallID) {
   };
 }
 
+function buildSeededServiceCallOption(serviceCallID) {
+  if (serviceCallID == null || String(serviceCallID).trim() === "") return null;
+  const id = String(serviceCallID).trim();
+  return {
+    value: id,
+    label: id,
+    serviceCallID: id,
+  };
+}
+
+function buildSeededSalesOrderOption(salesOrderID) {
+  if (salesOrderID == null || String(salesOrderID).trim() === "") return null;
+  const id = String(salesOrderID).trim();
+  return {
+    value: id,
+    label: id,
+  };
+}
+
+function unionSelectOption(options, extraOption) {
+  const list = Array.isArray(options) ? options : [];
+  if (extraOption == null || extraOption.value == null || extraOption.value === "") {
+    return list;
+  }
+  const extraVal = String(extraOption.value);
+  if (list.some((opt) => String(opt.value) === extraVal)) return list;
+  return [...list, extraOption];
+}
+
 function resolveServiceCallSubjectForUpsert(selectedServiceCall) {
   const raw =
     selectedServiceCall?.subject != null
@@ -538,6 +568,9 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
   const [showRepeatExtendModal, setShowRepeatExtendModal] = useState(false);
   const [repeatRule, setRepeatRule] = useState(null);
   const [isExtendingRepeat, setIsExtendingRepeat] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   const customerSource = useMemo(() => {
     if (initialJobData?.source === "portal") return "portal";
@@ -632,21 +665,10 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
   const [locationAddressTouched, setLocationAddressTouched] = useState(false);
   const [selectedWorkers, setSelectedWorkers] = useState([]);
   const [selectedServiceCall, setSelectedServiceCall] = useState(() =>
-    initialJobData?.serviceCallID
-      ? {
-          value: initialJobData.serviceCallID,
-          label: String(initialJobData.serviceCallID),
-          serviceCallID: initialJobData.serviceCallID,
-        }
-      : null
+    buildSeededServiceCallOption(initialJobData?.serviceCallID)
   );
   const [selectedSalesOrder, setSelectedSalesOrder] = useState(() =>
-    initialJobData?.salesOrderID
-      ? {
-          value: initialJobData.salesOrderID,
-          label: String(initialJobData.salesOrderID),
-        }
-      : null
+    buildSeededSalesOrderOption(initialJobData?.salesOrderID)
   );
   /** Explicit Service Call clear — honor null service_call_id on save even if job still has a stale FK. */
   const [serviceCallClearedByUser, setServiceCallClearedByUser] = useState(false);
@@ -662,8 +684,16 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
   const [workersLoading, setWorkersLoading] = useState(false);
   const [workerSearchInput, setWorkerSearchInput] = useState("");
   const [equipments, setEquipments] = useState([]);
-  const [serviceCalls, setServiceCalls] = useState([]);
-  const [salesOrders, setSalesOrders] = useState([]);
+  const [serviceCalls, setServiceCalls] = useState(() => {
+    const option = buildSeededServiceCallOption(initialJobData?.serviceCallID);
+    return option ? [option] : [];
+  });
+  const [salesOrders, setSalesOrders] = useState(() => {
+    const option = buildSeededSalesOrderOption(initialJobData?.salesOrderID);
+    return option ? [option] : [];
+  });
+  const [salesOrdersLoading, setSalesOrdersLoading] = useState(false);
+  const [salesOrdersHydrated, setSalesOrdersHydrated] = useState(false);
   const [schedulingWindows, setSchedulingWindows] = useState([]);
   const [jobStatuses, setJobStatuses] = useState(() => getDefaultJobStatuses()); // From Settings > Job Statuses; init with defaults so dropdown is never empty (same as Create Jobs)
   const [jobContactTypes, setJobContactTypes] = useState([]);
@@ -678,6 +708,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
   const [originalEquipments, setOriginalEquipments] = useState([]);
 
   const handleCustomerChangeRef = useRef(null);
+  const handleLocationChangeRef = useRef(null);
   const fetchCustomersRef = useRef(null);
   const customerSeededRef = useRef(false);
   const jobHydratedFromFetchRef = useRef(false);
@@ -686,6 +717,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
   const pendingJobContactTypeRef = useRef(null);
   const initialCustomerAppliedRef = useRef(false);
   const customerChangeInFlightRef = useRef(false);
+  const fetchSalesOrdersForServiceCallRef = useRef(null);
 
   // Match Create Job: show the form once core lookups are ready. SAP contacts /
   // locations / service calls hydrate in the background (customerRelatedDataLoaded).
@@ -696,6 +728,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
     jobStatusesLoaded &&
     jobContactTypesLoaded &&
     schedulingWindowsLoaded;
+  const isFormDisabled = !isFormReady || isLoading || isSubmitting || isExtendingRepeat;
 
   useEffect(() => {
     if (jobHydratedFromFetchRef.current) return;
@@ -770,6 +803,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
         warrantyEndDate: equipment.WarrantyEndDate || equipment.warrantyEndDate || null,
       }));
 
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate saved equipment into local state
       setOriginalEquipments(formattedEquipments);
       setSelectedEquipments(formattedEquipments);
       
@@ -788,6 +822,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
       const formattedStartTime = formatTimeForInput(initialJobData.startTime) || '';
       const formattedEndTime = formatTimeForInput(initialJobData.endTime) || '';
       
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate saved times into local form state
       setFormData(prev => ({
         ...prev,
         startTime: formattedStartTime || prev.startTime,
@@ -934,6 +969,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
         String(contactFullName || "").trim() !== "" ||
         String(contactEmail || "").trim() !== "";
 
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate saved contact into local form state
       setFormData((prev) => ({
         ...prev,
         contact: {
@@ -1041,6 +1077,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
       router.query.scheduleSession;
 
     if (hasScheduleQuery) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- apply schedule query params to the form
       setFormData((prev) => {
         if (!prev) return prev;
 
@@ -1176,6 +1213,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
   useEffect(() => {
     if (!jobDataLoaded || !jobStatusesLoaded || jobStatuses.length === 0) return;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- map saved status onto Settings options
     setFormData((prev) => {
       if (!prev) return prev;
       const raw = prev.jobStatus != null ? String(prev.jobStatus).trim() : "";
@@ -1228,6 +1266,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
     if (!customerCode && !customerName && !customerId) return;
 
     customerSeededRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- seed customer option before masterlist fetch
     setCustomers([
       {
         value: customerId || customerCode,
@@ -1343,7 +1382,10 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
       setCustomersLoaded(true);
     }
   };
-  fetchCustomersRef.current = fetchCustomers;
+
+  useLayoutEffect(() => {
+    fetchCustomersRef.current = fetchCustomers;
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -1395,6 +1437,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
 
     if (!customerCode && !customerId) {
       initialCustomerAppliedRef.current = true;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- no customer to hydrate; mark related data ready
       setCustomerRelatedDataLoaded(true);
       return;
     }
@@ -1480,6 +1523,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
     if (!jobDataLoaded || selectedJobContactType || jobContactTypes.length === 0) return;
     const serviceOption = findServiceJobContactTypeOption(jobContactTypes);
     if (!serviceOption) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- default missing contact type to Service
     setSelectedJobContactType(serviceOption);
     setFormData((prev) => ({
       ...prev,
@@ -1546,6 +1590,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load assignable workers on mount
     fetchAssignableWorkers("");
     return () => {
       if (workerSearchDebounceRef.current) clearTimeout(workerSearchDebounceRef.current);
@@ -1591,6 +1636,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
         .filter(Boolean); // Remove any undefined/null values
       
       if (matchedWorkers.length > 0) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- match saved assigned workers to select options
         setSelectedWorkers(matchedWorkers);
         workersHydratedRef.current = true;
       }
@@ -1634,6 +1680,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
       setEquipments([]);
       setServiceCalls([]);
       setSalesOrders([]);
+      setSalesOrdersHydrated(false);
       setFormData((prev) => ({
         ...prev,
         customerID: "",
@@ -1682,6 +1729,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
         setEquipments([]);
         setServiceCalls([]);
         setSalesOrders([]);
+        setSalesOrdersHydrated(false);
       }
 
       setSelectedCustomer(selectedOption);
@@ -1691,6 +1739,8 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
         customerID: selectedCustomer ? selectedCustomer.cardCode : "",
         customerName: selectedCustomer ? selectedCustomer.cardName : "",
       }));
+
+    let prefetchServiceCall = null;
 
     // Portal (generic) customers: build contact from stored email/phone and location from customer_address
     if (customerSource === "portal" && selectedCustomer?.customerId) {
@@ -1803,8 +1853,11 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
 
       setLocations(portalLocationOptions);
       setEquipments([]);
-      setServiceCalls([]);
-      setSalesOrders([]);
+      if (!isSameAsInitialCustomer) {
+        setServiceCalls([]);
+        setSalesOrders([]);
+        setSalesOrdersHydrated(false);
+      }
 
       if (isSameAsInitialCustomer) {
         const savedContact = initialJobData?.contact;
@@ -1857,7 +1910,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
             matchedLocation ||
             selectablePortalLocations[0] ||
             fallbackPrimaryLocation;
-          await handleLocationChange(
+          await handleLocationChangeRef.current?.(
             enrichPortalLocationOption(baseLocation, savedLocation, portalAddress),
             { skipGeocode: true }
           );
@@ -1889,10 +1942,14 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
         const baseLocation =
           selectablePortalLocations[0] || fallbackPrimaryLocation;
         if (baseLocation) {
-          await handleLocationChange(
+          await handleLocationChangeRef.current?.(
             enrichPortalLocationOption(baseLocation, null, portalAddress)
           );
         }
+      }
+
+      if (isSameAsInitialCustomer) {
+        prefetchServiceCall = selectedServiceCall;
       }
 
       setHasChanges(!isSameAsInitialCustomer);
@@ -2146,11 +2203,19 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
           }
         }
 
-        if (!matchedServiceCall && isSameAsInitialCustomer) {
-          matchedServiceCall = await buildSavedServiceCallOption(existingServiceCallID);
-          if (matchedServiceCall) {
-            formattedServiceCalls = [...formattedServiceCalls, matchedServiceCall];
+        if (isSameAsInitialCustomer) {
+          if (!matchedServiceCall) {
+            matchedServiceCall = await buildSavedServiceCallOption(
+              existingServiceCallID
+            );
           }
+          if (!matchedServiceCall) {
+            matchedServiceCall = buildSeededServiceCallOption(existingServiceCallID);
+          }
+          formattedServiceCalls = unionSelectOption(
+            formattedServiceCalls,
+            matchedServiceCall
+          );
         }
       }
 
@@ -2228,7 +2293,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
           );
           if (matchedLocation) {
             // Initial hydration: keep job coordinates; geocode only on user change.
-            await handleLocationChange(matchedLocation, { skipGeocode: true });
+            await handleLocationChangeRef.current?.(matchedLocation, { skipGeocode: true });
           }
         }
         if (countGroupedLocationOptions(groupedLocations) === 0) {
@@ -2278,15 +2343,21 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
       const { formattedServiceCalls, matchedServiceCall: matched } =
         serviceCallsSettled.value;
       matchedServiceCall = matched;
-      setServiceCalls(formattedServiceCalls);
+      const mergedServiceCalls = unionSelectOption(
+        formattedServiceCalls,
+        matchedServiceCall ||
+          (isSameAsInitialCustomer ? selectedServiceCall : null)
+      );
+      setServiceCalls(mergedServiceCalls);
 
       if (matchedServiceCall) {
         setSelectedServiceCall(matchedServiceCall);
       } else if (!isSameAsInitialCustomer) {
         setSalesOrders([]);
+        setSalesOrdersHydrated(false);
       }
 
-      if (formattedServiceCalls.length === 0 && !matchedServiceCall) {
+      if (mergedServiceCalls.length === 0 && !matchedServiceCall) {
         const sapLeadCode = selectedCustomer?.sap_card_code;
         const emptyHint = sapLeadCode
           ? `No service calls under ${cardCode}. Open quotations do not create service calls — check SAP Lead ${sapLeadCode} or create a Service Call in SAP first.`
@@ -2302,22 +2373,33 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
       if (!isSameAsInitialCustomer) {
         setServiceCalls([]);
         setSalesOrders([]);
+        setSalesOrdersHydrated(false);
       } else if (existingServiceCallID) {
         matchedServiceCall = await buildSavedServiceCallOption(existingServiceCallID);
+        if (!matchedServiceCall) {
+          matchedServiceCall = buildSeededServiceCallOption(existingServiceCallID);
+        }
         if (matchedServiceCall) {
-          setServiceCalls([matchedServiceCall]);
+          setServiceCalls((prev) => unionSelectOption(prev, matchedServiceCall));
           setSelectedServiceCall(matchedServiceCall);
         }
       }
     }
 
-    // Sales orders are deferred until service-call change or sales-order menu open
-    // (selectedSalesOrder is already seeded from initialJobData).
+    prefetchServiceCall =
+      matchedServiceCall ||
+      (isSameAsInitialCustomer ? selectedServiceCall : null);
 
     setHasChanges(!isSameAsInitialCustomer);
     if (isInitialHydration) {
       jobHydratedFromFetchRef.current = true;
     }
+    }
+
+    if (prefetchServiceCall) {
+      void fetchSalesOrdersForServiceCallRef.current?.(prefetchServiceCall, {
+        quiet: true,
+      });
     }
     } catch (error) {
       console.error("Error in handleCustomerChange:", error);
@@ -2340,7 +2422,10 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
       setCustomerRelatedDataLoaded(true);
     }
   };
-  handleCustomerChangeRef.current = handleCustomerChange;
+
+  useLayoutEffect(() => {
+    handleCustomerChangeRef.current = handleCustomerChange;
+  });
 
   const handleJobContactTypeChange = (selectedOption) => {
     setSelectedJobContactType(selectedOption);
@@ -2538,6 +2623,10 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
     setHasChanges(true);
   };
 
+  useLayoutEffect(() => {
+    handleLocationChangeRef.current = handleLocationChange;
+  });
+
   const handleContactFieldChange = (field, value) => {
     setFormData((prev) => ({
       ...prev,
@@ -2631,6 +2720,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
   ) => {
     if (!serviceCall) {
       setSalesOrders([]);
+      setSalesOrdersHydrated(false);
       return;
     }
 
@@ -2647,6 +2737,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
     }
 
     const toastId = "salesOrdersFetch";
+    setSalesOrdersLoading(true);
     try {
       if (!quiet) {
         toast.loading("Fetching sales orders...", { id: toastId });
@@ -2677,7 +2768,9 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
             }
           );
         }
-        setSalesOrders([]);
+        if (!selectedSalesOrder) {
+          setSalesOrders([]);
+        }
         return;
       }
 
@@ -2691,14 +2784,19 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
           docStatus: order.DocStatus,
         }));
 
-        setSalesOrders(formattedSalesOrders);
+        const mergedSalesOrders = unionSelectOption(
+          formattedSalesOrders,
+          selectedSalesOrder
+        );
+        setSalesOrders(mergedSalesOrders);
+        setSalesOrdersHydrated(true);
 
         const existingSalesOrderID =
           selectedSalesOrder?.value ||
           formData.salesOrderID ||
           initialJobData?.salesOrderID;
         if (existingSalesOrderID) {
-          const matchedSalesOrder = formattedSalesOrders.find(
+          const matchedSalesOrder = mergedSalesOrders.find(
             (so) =>
               so.value === existingSalesOrderID?.toString() ||
               so.value?.toString() === existingSalesOrderID?.toString()
@@ -2727,7 +2825,8 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
           }
         }
       } else {
-        setSalesOrders([]);
+        setSalesOrders((prev) => unionSelectOption(prev, selectedSalesOrder));
+        setSalesOrdersHydrated(true);
         if (!quiet) {
           toast.dismiss(toastId);
           console.warn("No sales orders found or invalid data format:", data);
@@ -2745,14 +2844,23 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
           duration: 5000,
         });
       }
-      setSalesOrders([]);
+      if (!selectedSalesOrder) {
+        setSalesOrders([]);
+      }
+    } finally {
+      setSalesOrdersLoading(false);
     }
   };
+
+  useLayoutEffect(() => {
+    fetchSalesOrdersForServiceCallRef.current = fetchSalesOrdersForServiceCall;
+  });
 
   const handleSelectedServiceCallChange = async (selectedServiceCall) => {
     setSelectedServiceCall(selectedServiceCall);
     setServiceCallClearedByUser(!selectedServiceCall);
     setSelectedSalesOrder(null); // Reset sales order when service call changes
+    setSalesOrdersHydrated(false);
     setHasChanges(true);
 
     if (!selectedServiceCall) {
@@ -4159,12 +4267,6 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
     handleSubmitClick();
   };
 
-  // Add this state for tracking changes
-  const [hasChanges, setHasChanges] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const isFormDisabled = !isFormReady || isLoading || isSubmitting || isExtendingRepeat;
-  // Add handleDescriptionChange function
   const handleDescriptionChange = (content) => {
     setFormData((prevState) => ({
       ...prevState,
@@ -4178,6 +4280,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
     if (!jobIdProp || !initialJobData) return;
 
     workersHydratedRef.current = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- parent already loaded this job
     setJobDataLoaded(true);
 
     if (initialJobData.jobNo) {
@@ -4793,9 +4896,12 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
                   placeholder={selectedCustomer ? "Select Service Call" : "Select Customer first"}
                   isDisabled={isFormDisabled || !selectedCustomer}
                   isClearable
+                  isLoading={Boolean(selectedCustomer) && !customerRelatedDataLoaded}
                   noOptionsMessage={() =>
                     selectedCustomer
-                      ? "No service calls found for this customer"
+                      ? customerRelatedDataLoaded
+                        ? "No service calls found for this customer"
+                        : "Loading service calls..."
                       : "Please select a customer first"
                   }
                 />
@@ -4813,7 +4919,11 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
                     setHasChanges(true);
                   }}
                   onMenuOpen={() => {
-                    if (selectedServiceCall && salesOrders.length === 0) {
+                    if (
+                      selectedServiceCall &&
+                      !salesOrdersHydrated &&
+                      !salesOrdersLoading
+                    ) {
                       void fetchSalesOrdersForServiceCall(selectedServiceCall, {
                         quiet: true,
                       });
@@ -4826,9 +4936,12 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
                   }
                   isDisabled={isFormDisabled || !selectedServiceCall}
                   isClearable
+                  isLoading={salesOrdersLoading}
                   noOptionsMessage={() =>
                     selectedServiceCall
-                      ? "No sales orders found for this service call"
+                      ? salesOrdersLoading
+                        ? "Loading sales orders..."
+                        : "No sales orders found for this service call"
                       : "Please select a service call first"
                   }
                 />

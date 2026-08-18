@@ -59,6 +59,39 @@ import mapDbContactsToSelectOptions from "../../../lib/jobs/mapDbContactsToSelec
 
 const JOB_STATUS_DOT_FALLBACK = "currentColor";
 
+async function fetchLocalOpenServiceCalls(customerId, cardCode) {
+  const supabase = getSupabaseClient();
+  if (!supabase || !customerId) return [];
+
+  const { data: localRows } = await supabase
+    .from("service_call")
+    .select(
+      "call_number, subject, description, status, customer_name_sap, sap_create_date, sap_create_time"
+    )
+    .eq("customer_id", customerId)
+    .in("status", ["OPEN", "IN_PROGRESS"])
+    .is("deleted_at", null)
+    .order("call_number", { ascending: false })
+    .limit(50);
+
+  if (!Array.isArray(localRows) || localRows.length === 0) return [];
+
+  return localRows
+    .filter((row) => row?.call_number)
+    .map((row) => ({
+      value: row.call_number,
+      label: `${row.call_number} - ${row.subject || "(local)"}`,
+      serviceCallID: row.call_number,
+      subject: row.subject || "",
+      customerName: row.customer_name_sap || "",
+      createDate: row.sap_create_date || "",
+      createTime: row.sap_create_time || "",
+      description: row.description || "",
+      fetchedForCardCode: cardCode,
+      fromLocal: true,
+    }));
+}
+
 const JobStatusSelectSingleValue = (props) => {
   const { data } = props;
   const dotColor = data?.color || JOB_STATUS_DOT_FALLBACK;
@@ -349,6 +382,7 @@ const AddNewJobs = ({ validateJobForm }) => {
   const [tasks, setTasks] = useState([]); // Initialize tasks
 
   const [serviceCalls, setServiceCalls] = useState([]);
+  const [serviceCallsLoading, setServiceCallsLoading] = useState(false);
   const [salesOrders, setSalesOrders] = useState([]);
   const [selectedServiceCall, setSelectedServiceCall] = useState(null);
   const [selectedSalesOrder, setSelectedSalesOrder] = useState(null);
@@ -1787,20 +1821,88 @@ const AddNewJobs = ({ validateJobForm }) => {
     }
 
     // Fetch service calls from SAP Service Layer (sql10 + OData fallback; sibling L/C codes)
-    try {
-      const cardCode = String(
-        selectedCustomer?.cardCode || selectedOption?.cardCode || selectedOption?.value || ""
-      ).trim();
-      const relatedCardCodes = [];
-      const relatedSapCode = String(
-        selectedCustomer?.sap_card_code || selectedOption?.sap_card_code || ""
-      ).trim();
-      if (
-        relatedSapCode &&
-        relatedSapCode.toUpperCase() !== cardCode.toUpperCase()
-      ) {
-        relatedCardCodes.push(relatedSapCode);
+    const cardCode = String(
+      selectedCustomer?.cardCode || selectedOption?.cardCode || selectedOption?.value || ""
+    ).trim();
+    const relatedCardCodes = [];
+    const relatedSapCode = String(
+      selectedCustomer?.sap_card_code || selectedOption?.sap_card_code || ""
+    ).trim();
+    if (
+      relatedSapCode &&
+      relatedSapCode.toUpperCase() !== cardCode.toUpperCase()
+    ) {
+      relatedCardCodes.push(relatedSapCode);
+    }
+
+    const applyLocalServiceCallFallback = async () => {
+      try {
+        const customerId =
+          selectedCustomer?.customerId || selectedOption?.customerId;
+        return await fetchLocalOpenServiceCalls(customerId, cardCode);
+      } catch (localScErr) {
+        console.warn("Local service_call fallback:", localScErr);
+        return [];
       }
+    };
+
+    const toastServiceCallEmpty = (sessionIssue) => {
+      if (sessionIssue) {
+        toast.error(
+          "SAP session unavailable — log in to SAP (or renew B1 session) to load service calls.",
+          {
+            duration: 6000,
+            style: {
+              background: "#fff",
+              color: "#dc3545",
+              padding: "16px",
+              borderLeft: "6px solid #dc3545",
+            },
+          }
+        );
+        return;
+      }
+      const sapLeadCode =
+        selectedCustomer?.sap_card_code || selectedOption?.sap_card_code;
+      const emptyHint = sapLeadCode
+        ? `No open service calls under ${cardCode} (also checked ${sapLeadCode}). Open quotations do not create service calls — create a Service Call in SAP first.`
+        : `No open service calls found for ${cardCode}. Open quotations do not create service calls — create a Service Call in SAP first.`;
+      toast(emptyHint, {
+        icon: "⚠️",
+        duration: 5000,
+        style: {
+          background: "#fff",
+          color: "#856404",
+          padding: "16px",
+          borderLeft: "6px solid #ffc107",
+        },
+      });
+    };
+
+    const toastServiceCallLoaded = (rows) => {
+      const fromLocal = rows.some((sc) => sc.fromLocal);
+      toast.success(
+        fromLocal
+          ? `Loaded ${rows.length} local service call(s) (SAP returned none).`
+          : `Successfully fetched ${rows.length} service calls.`,
+        {
+          duration: 5000,
+          style: {
+            background: "#fff",
+            color: "#28a745",
+            padding: "16px",
+            borderLeft: "6px solid #28a745",
+          },
+          iconTheme: {
+            primary: "#28a745",
+            secondary: "#fff",
+          },
+        }
+      );
+    };
+
+    setServiceCallsLoading(true);
+    try {
       const serviceCallResponse = await fetch("/api/getServiceCall", {
         method: "POST",
         credentials: "include",
@@ -1822,35 +1924,29 @@ const AddNewJobs = ({ validateJobForm }) => {
           serviceCallResponse.status,
           errorPayload
         );
-        setServiceCalls([]);
+
+        const localRows = await applyLocalServiceCallFallback();
+        setServiceCalls(localRows);
         setSalesOrders([]);
 
-        if (
-          serviceCallResponse.status === 401 ||
-          errorPayload?.sessionMissing
-        ) {
-          toast.error(
-            "SAP session unavailable — log in to SAP (or renew B1 session) to load service calls.",
-            {
-              duration: 6000,
+        if (localRows.length > 0) {
+          toastServiceCallLoaded(localRows);
+        } else {
+          const sessionIssue =
+            serviceCallResponse.status === 401 || errorPayload?.sessionMissing;
+          if (sessionIssue) {
+            toastServiceCallEmpty(true);
+          } else {
+            toast.error("Failed to fetch service calls from SAP. Please try again.", {
+              duration: 5000,
               style: {
                 background: "#fff",
                 color: "#dc3545",
                 padding: "16px",
                 borderLeft: "6px solid #dc3545",
               },
-            }
-          );
-        } else {
-          toast.error("Failed to fetch service calls from SAP. Please try again.", {
-            duration: 5000,
-            style: {
-              background: "#fff",
-              color: "#dc3545",
-              padding: "16px",
-              borderLeft: "6px solid #dc3545",
-            },
-          });
+            });
+          }
         }
       } else {
         const serviceCallsData = await serviceCallResponse.json();
@@ -1875,105 +1971,43 @@ const AddNewJobs = ({ validateJobForm }) => {
           };
         });
 
-        // Align with Edit Job: when SAP returns nothing, surface open local service_call rows.
         if (formattedServiceCalls.length === 0) {
-          try {
-            const supabase = getSupabaseClient();
-            const customerId =
-              selectedCustomer?.customerId || selectedOption?.customerId;
-            if (supabase && customerId) {
-              const { data: localRows } = await supabase
-                .from("service_call")
-                .select(
-                  "call_number, subject, description, status, customer_name_sap, sap_create_date, sap_create_time"
-                )
-                .eq("customer_id", customerId)
-                .in("status", ["OPEN", "IN_PROGRESS"])
-                .is("deleted_at", null)
-                .order("call_number", { ascending: false })
-                .limit(50);
-
-              if (Array.isArray(localRows) && localRows.length > 0) {
-                formattedServiceCalls = localRows
-                  .filter((row) => row?.call_number)
-                  .map((row) => ({
-                    value: row.call_number,
-                    label: `${row.call_number} - ${row.subject || "(local)"}`,
-                    serviceCallID: row.call_number,
-                    subject: row.subject || "",
-                    customerName: row.customer_name_sap || "",
-                    createDate: row.sap_create_date || "",
-                    createTime: row.sap_create_time || "",
-                    description: row.description || "",
-                    fetchedForCardCode: cardCode,
-                    fromLocal: true,
-                  }));
-              }
-            }
-          } catch (localScErr) {
-            console.warn("Local service_call fallback:", localScErr);
-          }
+          formattedServiceCalls = await applyLocalServiceCallFallback();
         }
 
         setServiceCalls(formattedServiceCalls);
+        setSalesOrders([]);
 
         if (formattedServiceCalls.length === 0) {
-          const sapLeadCode =
-            selectedCustomer?.sap_card_code || selectedOption?.sap_card_code;
-          const emptyHint = sapLeadCode
-            ? `No open service calls under ${cardCode} (also checked ${sapLeadCode}). Open quotations do not create service calls — create a Service Call in SAP first.`
-            : `No open service calls found for ${cardCode}. Open quotations do not create service calls — create a Service Call in SAP first.`;
-          toast(emptyHint, {
-            icon: "⚠️",
-            duration: 5000,
-            style: {
-              background: "#fff",
-              color: "#856404",
-              padding: "16px",
-              borderLeft: "6px solid #ffc107",
-            },
-          });
+          toastServiceCallEmpty(false);
         } else {
-          const fromLocal = formattedServiceCalls.some((sc) => sc.fromLocal);
-          toast.success(
-            fromLocal
-              ? `Loaded ${formattedServiceCalls.length} local service call(s) (SAP returned none).`
-              : `Successfully fetched ${formattedServiceCalls.length} service calls.`,
-            {
-              duration: 5000,
-              style: {
-                background: "#fff",
-                color: "#28a745",
-                padding: "16px",
-                borderLeft: "6px solid #28a745",
-              },
-              iconTheme: {
-                primary: "#28a745",
-                secondary: "#fff",
-              },
-            }
-          );
+          toastServiceCallLoaded(formattedServiceCalls);
         }
-
-        // Clear sales orders when customer changes
-        setSalesOrders([]);
       }
     } catch (error) {
       console.error("Error fetching service calls:", error);
-      setServiceCalls([]);
-      toast.error("Failed to fetch service calls. Please try again.", {
-        duration: 5000,
-        style: {
-          background: "#fff",
-          color: "#dc3545",
-          padding: "16px",
-          borderLeft: "6px solid #dc3545",
-        },
-        iconTheme: {
-          primary: "#dc3545",
-          secondary: "#fff",
-        },
-      });
+      const localRows = await applyLocalServiceCallFallback();
+      setServiceCalls(localRows);
+      setSalesOrders([]);
+      if (localRows.length > 0) {
+        toastServiceCallLoaded(localRows);
+      } else {
+        toast.error("Failed to fetch service calls. Please try again.", {
+          duration: 5000,
+          style: {
+            background: "#fff",
+            color: "#dc3545",
+            padding: "16px",
+            borderLeft: "6px solid #dc3545",
+          },
+          iconTheme: {
+            primary: "#dc3545",
+            secondary: "#fff",
+          },
+        });
+      }
+    } finally {
+      setServiceCallsLoading(false);
     }
   };
 
@@ -4673,8 +4707,20 @@ const AddNewJobs = ({ validateJobForm }) => {
                   options={serviceCalls}
                   value={selectedServiceCall}
                   onChange={handleSelectedServiceCallChange}
-                  placeholder="Select Service Call"
+                  placeholder={
+                    serviceCallsLoading
+                      ? "Loading service calls..."
+                      : "Select Service Call"
+                  }
                   isDisabled={!selectedCustomer}
+                  isLoading={serviceCallsLoading}
+                  noOptionsMessage={() =>
+                    serviceCallsLoading
+                      ? "Loading service calls..."
+                      : selectedCustomer
+                        ? "No service calls found for this customer"
+                        : "Please select a customer first"
+                  }
                 />
               </Form.Group>
 

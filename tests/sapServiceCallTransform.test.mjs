@@ -92,6 +92,8 @@ const addLine = buildServiceCallActivityLine({
 });
 assert.equal(addLine.LineNum, undefined, 'omit LineNum when GET did not find the activity');
 assert.equal(addLine.ActivityCode, 33548);
+assert.equal(addLine.U_JobStatus, 'NI', 'every portal sync sends NI');
+assert.equal(addLine.U_InvNumber, undefined, 'portal does not send U_InvNumber');
 
 const stored = pickStoredServiceCallActivityLine({
   LineNum: 16,
@@ -133,7 +135,7 @@ const realInvoiceJob = {
   payment_qr_inv_number: '9008910',
 };
 assert.equal(hasRealSapInvoiceNumber(realInvoiceJob), true);
-assert.equal(deriveInvoiceStatusFlag(realInvoiceJob, []), 'I');
+assert.equal(deriveInvoiceStatusFlag(realInvoiceJob, []), 'NI', 'portal never sends I even with a real invoice number');
 const realInvLine = buildServiceCallActivityLine({
   job: realInvoiceJob,
   poNumber: null,
@@ -141,8 +143,8 @@ const realInvLine = buildServiceCallActivityLine({
   lineNum: 16,
   jobStatus: { jobStatusId: '-1', jobStatusLabel: 'Job Done' },
 });
-assert.equal(realInvLine.U_JobStatus, 'I');
-assert.equal(realInvLine.U_InvNumber, '9008910');
+assert.equal(realInvLine.U_JobStatus, 'NI');
+assert.equal(realInvLine.U_InvNumber, undefined, 'Document Automation owns U_InvNumber');
 
 assert.equal(formatAuditValueEmptyObject({}), '—', 'empty audit objects display as em dash, not {}');
 assert.equal(
