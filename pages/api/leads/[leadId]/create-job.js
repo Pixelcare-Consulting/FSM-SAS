@@ -6,7 +6,6 @@
 import { leadService, customerService, jobService } from '../../../../lib/supabase/database';
 import { getSupabaseAdmin } from '../../../../lib/supabase/server';
 import sapService from '../../../../lib/services/sapService';
-import { syncJobToSAP } from '../../../../lib/services/jobSyncToSap';
 import { transformToSAPBusinessPartner, validateBusinessPartnerData } from '../../../../lib/utils/sapBusinessPartnerTransform';
 import { ensurePortalCustomerPrimaryContact } from '../../../../lib/customers/ensurePortalCustomerPrimaryContact';
 import { buildSingaporeDateTimeUtc, toSingaporeTimeHm } from '../../../../lib/utils/singaporeDateTime';
@@ -16,7 +15,6 @@ import { insertPortalDefaultJobContactType } from '../../../../lib/jobs/portalDe
 import { getNextJobNumber } from '../../../../lib/jobs/getNextJobNumber';
 import {
   writeAuditLogFromRequest,
-  logJobSyncResult,
   AUDIT_ACTIONS,
   AUDIT_CATEGORIES,
   AUDIT_STATUS,
@@ -366,28 +364,6 @@ export default async function handler(req, res) {
       },
       status: AUDIT_STATUS.SUCCESS,
     });
-
-    // Phase 2: Sync job to SAP Activities (non-blocking)
-    const sessionCookies = sapService.getSessionCookies(req);
-    if (sessionCookies) {
-      try {
-        const syncResult = await syncJobToSAP({ jobId: job.id, supabase: getSupabaseAdmin(), sessionCookies });
-        void logJobSyncResult({
-          req,
-          jobId: job.id,
-          jobNumber: job.job_number,
-          result: syncResult || {},
-        });
-      } catch (syncErr) {
-        console.warn('SAP job sync failed (non-blocking):', syncErr?.message);
-        void logJobSyncResult({
-          req,
-          jobId: job.id,
-          jobNumber: job.job_number,
-          result: { success: false, error: syncErr?.message, job_number: job.job_number },
-        });
-      }
-    }
 
     // Update lead status to CONVERTED and link to customer
     await leadService.convertToCustomer(leadId, customerId);

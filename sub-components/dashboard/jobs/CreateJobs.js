@@ -3480,16 +3480,6 @@ const AddNewJobs = ({ validateJobForm }) => {
             firstJobId = job.id;
           }
 
-          // Phase 2: Sync job to SAP Activities (non-blocking)
-          fetch('/api/jobs/sync-to-sap', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jobId: job.id }),
-            credentials: 'include'
-          }).then(r => {
-            if (!r.ok) console.warn('SAP job sync failed for job', job.id);
-          }).catch(e => console.warn('SAP job sync error', e));
-
           // 4.5. Create job-sales_order relationship
           // Since jobs table doesn't have sales_order_id column, we'll try to create a relationship
           // First, try to add sales_order_id directly to jobs table (if column exists)
