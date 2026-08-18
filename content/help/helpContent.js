@@ -64,7 +64,7 @@ export const HELP_TIPS = [
       {
         label: "Technicians Scheduler",
         link: "/scheduler",
-        tip: "Assign jobs to technicians and manage the schedule.",
+        tip: "Assign jobs to technicians and manage the schedule. Refresh keeps the date and day, week, or month view you selected.",
       },
       {
         label: "Company Calendar",

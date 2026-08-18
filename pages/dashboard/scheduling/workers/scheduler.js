@@ -13,10 +13,11 @@ import PortalModal, {
 import {
   updateTechnicianSchedule,
   updateTechnicianColor,
-  reassignTechnician,
+  reassignTechnicians,
   updateJobStatusFromScheduler,
   rescheduleJobAppointment,
   hydrateSchedulerEvent,
+  hydrateSchedulerEvents,
 } from "../../../../lib/scheduler/technicianSchedulerService";
 import { useSchedulerData } from "../../../../lib/scheduler/useSchedulerData";
 import { useSchedulerFreshness } from "../../../../lib/scheduler/useSchedulerFreshness";
@@ -33,6 +34,13 @@ import {
   computeSchedulerFetchRange,
   schedulerFetchRangeKey,
 } from "../../../../lib/scheduler/schedulerFetchRange";
+import {
+  buildSchedulerAsPath,
+  firstQueryValue,
+  formatSchedulerDateParam,
+  parseSchedulerDateParam,
+  parseSchedulerViewParam,
+} from "../../../../lib/scheduler/schedulerUrlState";
 import {
   buildEventsByTechAndDay,
   getEventsForTechAndDay,
@@ -72,6 +80,7 @@ import {
   Clock as ClockIcon,
   ArrowRepeat as ArrowRepeatIcon,
   PersonFill as PersonFillIcon,
+  InfoCircleFill as InfoCircleFillIcon,
 } from "react-bootstrap-icons";
 import { phoneLinkRow } from "../../../../lib/utils/toTelHref";
 import SchedulerJobStatusEditModal from "./_components/SchedulerJobStatusEditModal";
@@ -126,6 +135,23 @@ const REASSIGN_TECHNICIAN_SELECT_STYLES = {
   }),
   placeholder: (base) => ({ ...base, color: "#94a3b8" }),
   singleValue: (base) => ({ ...base, color: "#1e293b" }),
+  multiValue: (base) => ({
+    ...base,
+    backgroundColor: "#e9ecef",
+    borderRadius: "4px",
+  }),
+  multiValueLabel: (base) => ({
+    ...base,
+    color: "#495057",
+    padding: "2px 6px",
+  }),
+  multiValueRemove: (base) => ({
+    ...base,
+    ":hover": {
+      backgroundColor: "#dc3545",
+      color: "white",
+    },
+  }),
 };
 
 const CALENDAR_AVAILABILITY_ISSUES = new Set([
@@ -297,13 +323,6 @@ function getAssignedTechnicianNames(job, resources, allEvents) {
   }
 
   return [...new Set(names)];
-}
-
-function getReplacingTechnicianName(job, resources) {
-  const resourceId = job?.resourceId ?? job?.technicianId ?? job?.technician_id;
-  if (resourceId == null || !Array.isArray(resources)) return "";
-  const tech = resources.find((r) => String(r?.resourceId ?? r?.id) === String(resourceId));
-  return tech?.text || tech?.name || tech?.full_name || tech?.fullName || "";
 }
 
 function getContactInitials(name) {
@@ -605,8 +624,13 @@ function getEventsForDayFromIndex(eventsByTechAndDay, ymd, allowedTechIds) {
 
 const Scheduler = () => {
   const router = useRouter();
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState('day');
+  const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
+  const [viewMode, setViewMode] = useState("day");
+  const [urlSnapshot, setUrlSnapshot] = useState({
+    date: "",
+    view: "",
+    ready: false,
+  });
   const [dateInputValue, setDateInputValue] = useState(() =>
     formatSchedulerDateInputValue(new Date(), "day")
   );
@@ -630,6 +654,59 @@ const Scheduler = () => {
     const range = computeSchedulerFetchRange(viewMode, selectedDate);
     return `${schedulerFetchRangeKey(range)}|undated:${includeUndated}`;
   }, [viewMode, selectedDate, includeUndated]);
+
+  const urlDateParam = router.isReady
+    ? String(firstQueryValue(router.query.date) || "")
+    : "";
+  const urlViewParam = router.isReady
+    ? String(firstQueryValue(router.query.view) || "")
+    : "";
+  if (
+    router.isReady &&
+    (urlSnapshot.date !== urlDateParam ||
+      urlSnapshot.view !== urlViewParam ||
+      !urlSnapshot.ready)
+  ) {
+    setUrlSnapshot({ date: urlDateParam, view: urlViewParam, ready: true });
+    const dateFromUrl = parseSchedulerDateParam(urlDateParam);
+    const viewFromUrl = parseSchedulerViewParam(urlViewParam);
+    if (dateFromUrl) {
+      setSelectedDate((prev) =>
+        formatSchedulerDateParam(prev) === formatSchedulerDateParam(dateFromUrl)
+          ? prev
+          : dateFromUrl
+      );
+    }
+    if (viewFromUrl) {
+      setViewMode((prev) => (prev === viewFromUrl ? prev : viewFromUrl));
+    }
+  }
+  const urlStateReady = urlSnapshot.ready;
+
+  useEffect(() => {
+    if (!router.isReady || !urlStateReady) return;
+
+    const dateParam = formatSchedulerDateParam(selectedDate);
+    if (!dateParam) return;
+
+    const urlDate = String(firstQueryValue(router.query.date) || "");
+    const urlView = String(firstQueryValue(router.query.view) || "");
+    if (urlDate === dateParam && urlView === viewMode) return;
+
+    const nextQuery = { ...router.query, date: dateParam, view: viewMode };
+    const asPath = buildSchedulerAsPath(nextQuery);
+    router.replace(
+      { pathname: router.pathname, query: nextQuery },
+      asPath,
+      { shallow: true }
+    );
+  }, [
+    router,
+    urlStateReady,
+    selectedDate,
+    viewMode,
+  ]);
+
   const {
     resources,
     setResources,
@@ -643,12 +720,18 @@ const Scheduler = () => {
     hasLoadedOnceRef,
     refreshData,
     patchEvent,
-  } = useSchedulerData({ viewMode, selectedDate, includeUndated });
+    replaceEventsForJob,
+  } = useSchedulerData({
+    viewMode,
+    selectedDate,
+    includeUndated,
+    enabled: urlStateReady,
+  });
   useSchedulerFreshness({
     viewMode,
     selectedDate,
     refreshData,
-    enabled: !isInitialLoad,
+    enabled: urlStateReady && !isInitialLoad,
     includeUndated,
   });
 
@@ -670,7 +753,7 @@ const Scheduler = () => {
   const [showReassignModal, setShowReassignModal] = useState(false);
   const [showStatusEditModal, setShowStatusEditModal] = useState(false);
   const [showScheduleEditModal, setShowScheduleEditModal] = useState(false);
-  const [selectedNewTechnician, setSelectedNewTechnician] = useState(null);
+  const [selectedNewTechnicians, setSelectedNewTechnicians] = useState([]);
   const [isReassigning, setIsReassigning] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isUpdatingSchedule, setIsUpdatingSchedule] = useState(false);
@@ -690,26 +773,26 @@ const Scheduler = () => {
   );
   const jobStatusesReadyRef = useRef(Boolean(readCachedJobStatuses()?.length));
 
-  const reassignAvailability = React.useMemo(() => {
-    if (!selectedNewTechnician || !selectedJob?.start) return null;
-    return getTechnicianAvailabilityIssues({
-      dateLike: selectedJob.start,
-      employeeSchedule: selectedNewTechnician.employeeSchedule,
-      calendarEvents,
-      technicianId: selectedNewTechnician.id,
-      technicianName: selectedNewTechnician.text || selectedNewTechnician.name || "Technician",
-    });
-  }, [selectedNewTechnician, selectedJob, calendarEvents]);
+  const reassignAvailabilities = React.useMemo(() => {
+    if (!selectedNewTechnicians.length || !selectedJob?.start) return [];
+    return selectedNewTechnicians
+      .map((tech) => ({
+        technician: tech,
+        availability: getTechnicianAvailabilityIssues({
+          dateLike: selectedJob.start,
+          employeeSchedule: tech.employeeSchedule,
+          calendarEvents,
+          technicianId: tech.id,
+          technicianName: tech.text || tech.name || "Technician",
+        }),
+      }))
+      .filter((item) => item.availability.labels?.length > 0);
+  }, [selectedNewTechnicians, selectedJob, calendarEvents]);
 
   const reassignTechnicianOptions = useMemo(() => {
     if (!selectedJob) return [];
     return resources
-      .filter(
-        (tech) =>
-          isTechnicianActive(tech) &&
-          tech.id !== selectedJob.resourceId &&
-          tech.id !== selectedJob.technicianId
-      )
+      .filter((tech) => isTechnicianActive(tech))
       .sort((a, b) =>
         (a.text || a.name || "").localeCompare(b.text || b.name || "", undefined, {
           sensitivity: "base",
@@ -723,11 +806,14 @@ const Scheduler = () => {
       }));
   }, [resources, selectedJob]);
 
-  const selectedReassignOption = useMemo(
+  const selectedReassignOptions = useMemo(
     () =>
-      reassignTechnicianOptions.find((opt) => opt.value === selectedNewTechnician?.id) ||
-      null,
-    [reassignTechnicianOptions, selectedNewTechnician]
+      selectedNewTechnicians
+        .map((tech) =>
+          reassignTechnicianOptions.find((opt) => opt.value === tech?.id)
+        )
+        .filter(Boolean),
+    [reassignTechnicianOptions, selectedNewTechnicians]
   );
 
   const loadJobStatuses = useCallback(async ({ wait = false } = {}) => {
@@ -917,7 +1003,7 @@ const Scheduler = () => {
     jobModalClosingRef.current = true;
     setShowJobModal(false);
     setShowReassignModal(false);
-    setSelectedNewTechnician(null);
+    setSelectedNewTechnicians([]);
     setSelectedJob(null);
     window.setTimeout(() => {
       jobModalClosingRef.current = false;
@@ -998,43 +1084,56 @@ const Scheduler = () => {
   };
 
   const handleReassign = async () => {
-    if (!selectedJob || !selectedNewTechnician) {
-      // toast.error('Please select a technician to reassign to');
+    if (!selectedJob || !selectedNewTechnicians.length) {
       return;
     }
 
     setIsReassigning(true);
     try {
-      // Pure reassign: only change the technician. Do NOT re-send start/end — prefer
-      // jobs.scheduled_end for appointment display; stale job_schedule.jetime must not widen the slot.
-      const updatedEvent = await reassignTechnician({
-        technicianJobId: selectedJob.technicianJobId,
+      const technicianIds = selectedNewTechnicians.map((tech) => tech.id);
+      const updatedEvents = await reassignTechnicians({
         jobId: selectedJob.jobId,
-        technicianId: selectedNewTechnician.id,
+        technicianIds,
       });
 
-      const hydrated = hydrateSchedulerEvent(updatedEvent, resources);
-      const patched = {
-        ...hydrated,
-        resourceId: selectedNewTechnician.id,
-        technicianId: selectedNewTechnician.id,
-        color: getJobStatusColorFromSettings(hydrated.jobStatus) || hydrated.color,
-        meta: {
-          ...(hydrated.meta || {}),
-          technicianName:
-            selectedNewTechnician.text ||
-            selectedNewTechnician.name ||
-            hydrated.meta?.technicianName,
-        },
-      };
-      patchEvent(patched);
-      setSelectedJob(patched);
+      const hydrated = hydrateSchedulerEvents(updatedEvents || [], resources).filter(Boolean);
+      const patched = hydrated.map((evt) => {
+        const resourceId = evt.technicianId || evt.resourceId;
+        const resource = resources.find(
+          (r) => String(r.id) === String(resourceId)
+        );
+        return {
+          ...evt,
+          resourceId,
+          technicianId: resourceId,
+          color: getJobStatusColorFromSettings(evt.jobStatus) || evt.color,
+          meta: {
+            ...(evt.meta || {}),
+            technicianName:
+              resource?.text ||
+              resource?.name ||
+              evt.meta?.technicianName,
+          },
+        };
+      });
+
+      replaceEventsForJob(selectedJob.jobId, patched);
+
+      const firstId = selectedNewTechnicians[0]?.id;
+      const focusEvent =
+        patched.find(
+          (evt) =>
+            String(evt.technicianId) === String(firstId) ||
+            String(evt.resourceId) === String(firstId)
+        ) || patched[0];
+      if (focusEvent) {
+        setSelectedJob(focusEvent);
+      }
       setShowReassignModal(false);
-      setSelectedNewTechnician(null);
+      setSelectedNewTechnicians([]);
       await invalidateSchedulerServerCache();
     } catch (error) {
       console.error('Reassign error:', error);
-      // toast.error(error.message || 'Failed to reassign job');
     } finally {
       setIsReassigning(false);
     }
@@ -1044,14 +1143,14 @@ const Scheduler = () => {
     showReassignModal || showStatusEditModal || showScheduleEditModal;
 
   const handleOpenReassignModal = () => {
-    setSelectedNewTechnician(null);
+    setSelectedNewTechnicians([]);
     setShowReassignModal(true);
   };
 
   const handleCloseReassignModal = () => {
     if (isReassigning) return;
     setShowReassignModal(false);
-    setSelectedNewTechnician(null);
+    setSelectedNewTechnicians([]);
   };
 
   const handleOpenStatusEditModal = () => {
@@ -2303,7 +2402,8 @@ const Scheduler = () => {
             </span>
           ) : null
         }
-        size="md"
+        size="xl"
+        modalClassName={styles.reassignPortalModal}
         bodyClassName="portal-form-body"
         footer={
           <>
@@ -2317,7 +2417,7 @@ const Scheduler = () => {
             <Button
               variant="primary"
               onClick={handleReassign}
-              disabled={!selectedNewTechnician || isReassigning}
+              disabled={!selectedNewTechnicians.length || isReassigning}
             >
               {isReassigning ? "Reassigning…" : "Confirm reassignment"}
             </Button>
@@ -2326,123 +2426,137 @@ const Scheduler = () => {
       >
         {selectedJob ? (
           <div className={styles.reassignModalBody}>
-            {(() => {
-              const before = getAssignedTechnicianNames(selectedJob, resources, events);
-              const replacing = getReplacingTechnicianName(selectedJob, resources);
-              const replacingDisplay = replacing || before[0] || "";
-              const afterName =
-                selectedNewTechnician?.text ||
-                selectedNewTechnician?.name ||
-                selectedNewTechnician?.full_name ||
-                selectedNewTechnician?.fullName ||
-                "";
+            <div className={styles.reassignModalNote} role="note">
+              <span className={styles.reassignModalNoteIcon} aria-hidden>
+                <InfoCircleFillIcon />
+              </span>
+              <p className={styles.reassignModalNoteText}>
+                <strong>Note:</strong> The people you pick become the full crew.
+                To keep a technician who is already assigned (shown under Before),
+                select them here as well. Anyone left out is removed when you confirm.
+              </p>
+            </div>
+            <div className={styles.reassignModalSplit}>
+              {(() => {
+                const before = getAssignedTechnicianNames(selectedJob, resources, events);
+                const afterTechs = selectedNewTechnicians
+                  .map((tech) => ({
+                    id: tech?.id,
+                    name:
+                      tech?.text ||
+                      tech?.name ||
+                      tech?.full_name ||
+                      tech?.fullName ||
+                      "",
+                  }))
+                  .filter((tech) => tech.name);
 
-              return (
-                <div className={styles.reassignPreviewCard}>
-                  <div className={styles.reassignPreviewTitle}>Assignment preview</div>
-                  <div className={styles.reassignPreviewRows}>
-                    <div className={styles.reassignPreviewRow}>
-                      <div className={styles.reassignPreviewLabel}>Before</div>
-                      <div className={styles.reassignPreviewValue}>
-                        {before.length ? (
-                          <div className={styles.jobDetailHeroAssignedPills}>
-                            {before.map((name) => (
-                              <span
-                                key={`before-${name}`}
-                                className={`${styles.jobDetailHeroAssignedPill} ${
-                                  replacingDisplay && name === replacingDisplay
-                                    ? styles.reassignPreviewReplacingPill
-                                    : ""
-                                }`}
-                                title={name}
-                              >
-                                {name}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className={styles.reassignPreviewEmpty}>Unassigned</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className={styles.reassignPreviewDivider} aria-hidden>
-                      →
-                    </div>
-
-                    <div className={styles.reassignPreviewRow}>
-                      <div className={styles.reassignPreviewLabel}>After</div>
-                      <div className={styles.reassignPreviewValue}>
-                        {afterName ? (
-                          <div className={styles.reassignAfterStack}>
+                return (
+                  <div className={styles.reassignPreviewCard}>
+                    <div className={styles.reassignPreviewTitle}>Assignment preview</div>
+                    <div className={styles.reassignPreviewRows}>
+                      <div className={styles.reassignPreviewRow}>
+                        <div className={styles.reassignPreviewLabel}>Before</div>
+                        <div className={styles.reassignPreviewValue}>
+                          {before.length ? (
                             <div className={styles.jobDetailHeroAssignedPills}>
-                              <span
-                                className={`${styles.jobDetailHeroAssignedPill} ${styles.reassignPreviewAfterPill}`}
-                                title={afterName}
-                              >
-                                {afterName}
-                              </span>
-                            </div>
-                            {replacingDisplay ? (
-                              <div className={styles.reassignReplacingInline}>
-                                <span className={styles.reassignReplacingInlineLabel}>
-                                  Replacing
-                                </span>
+                              {before.map((name) => (
                                 <span
-                                  className={`${styles.jobDetailHeroAssignedPill} ${styles.reassignPreviewReplacingPill}`}
-                                  title={replacingDisplay}
+                                  key={`before-${name}`}
+                                  className={styles.jobDetailHeroAssignedPill}
+                                  title={name}
                                 >
-                                  {replacingDisplay}
+                                  {name}
                                 </span>
-                              </div>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <span className={styles.reassignPreviewHint}>
-                            Select a technician to preview
-                          </span>
-                        )}
+                              ))}
+                            </div>
+                          ) : (
+                            <span className={styles.reassignPreviewEmpty}>Unassigned</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className={styles.reassignPreviewDivider} aria-hidden>
+                        →
+                      </div>
+
+                      <div className={styles.reassignPreviewRow}>
+                        <div className={styles.reassignPreviewLabel}>After</div>
+                        <div className={styles.reassignPreviewValue}>
+                          {afterTechs.length ? (
+                            <div className={styles.jobDetailHeroAssignedPills}>
+                              {afterTechs.map((tech) => (
+                                <span
+                                  key={`after-${tech.id || tech.name}`}
+                                  className={`${styles.jobDetailHeroAssignedPill} ${styles.reassignPreviewAfterPill}`}
+                                  title={tech.name}
+                                >
+                                  {tech.name}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className={styles.reassignPreviewHint}>
+                              Select technicians to preview
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })()}
+                );
+              })()}
 
-            <label className="form-label" htmlFor="reassign-tech-select">
-              Select new technician
-            </label>
-            <Select
-              inputId="reassign-tech-select"
-              instanceId="reassign-tech-select"
-              options={reassignTechnicianOptions}
-              value={selectedReassignOption}
-              onChange={(option) => {
-                const tech = resources.find((r) => r.id === option?.value);
-                setSelectedNewTechnician(tech || null);
-              }}
-              isDisabled={isReassigning}
-              isClearable
-              isSearchable
-              placeholder="Search or choose a technician…"
-              noOptionsMessage={() => "No technicians found"}
-              styles={REASSIGN_TECHNICIAN_SELECT_STYLES}
-              menuPortalTarget={typeof document !== "undefined" ? document.body : null}
-              menuPlacement="auto"
-            />
-            {reassignAvailability?.labels?.length > 0 ? (
-              <div className={styles.jobDetailReassignAlert} role="alert">
-                {reassignAvailability.labels.map((line) => (
-                  <div key={line}>{line}</div>
-                ))}
-                <div className={styles.jobDetailReassignAlertFoot}>
-                  <SchedulerAvailabilityHelpLinks
-                    availability={reassignAvailability}
-                    technician={selectedNewTechnician}
-                    dateLike={selectedJob.start}
-                  />
-                </div>
+              <div className={styles.reassignModalSplitMain}>
+                <label className="form-label" htmlFor="reassign-tech-select">
+                  Select new technicians
+                </label>
+                <Select
+                  inputId="reassign-tech-select"
+                  instanceId="reassign-tech-select"
+                  isMulti
+                  options={reassignTechnicianOptions}
+                  value={selectedReassignOptions}
+                  onChange={(options) => {
+                    const next = (options || [])
+                      .map((option) => resources.find((r) => r.id === option?.value))
+                      .filter(Boolean);
+                    setSelectedNewTechnicians(next);
+                  }}
+                  isDisabled={isReassigning}
+                  isClearable
+                  isSearchable
+                  closeMenuOnSelect={false}
+                  placeholder="Search or choose technicians…"
+                  noOptionsMessage={() => "No technicians found"}
+                  styles={REASSIGN_TECHNICIAN_SELECT_STYLES}
+                  menuPortalTarget={typeof document !== "undefined" ? document.body : null}
+                  menuPlacement="auto"
+                />
               </div>
+            </div>
+
+            {reassignAvailabilities.length > 0 ? (
+            <div className={styles.reassignModalAlerts}>
+              {reassignAvailabilities.map(({ technician, availability }) => (
+                  <div
+                    key={technician.id}
+                    className={styles.jobDetailReassignAlert}
+                    role="alert"
+                  >
+                    {availability.labels.map((line) => (
+                      <div key={line}>{line}</div>
+                    ))}
+                    <div className={styles.jobDetailReassignAlertFoot}>
+                      <SchedulerAvailabilityHelpLinks
+                        availability={availability}
+                        technician={technician}
+                        dateLike={selectedJob.start}
+                      />
+                    </div>
+                  </div>
+                ))}
+            </div>
             ) : null}
           </div>
         ) : null}
