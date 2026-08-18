@@ -64,7 +64,7 @@ export const HELP_TIPS = [
       {
         label: "Technicians Scheduler",
         link: "/scheduler",
-        tip: "Assign jobs to technicians and manage the schedule.",
+        tip: "Assign jobs to technicians and manage the schedule. Refresh keeps the date and day, week, or month view you selected.",
       },
       {
         label: "Company Calendar",
@@ -73,7 +73,7 @@ export const HELP_TIPS = [
           "Manage company holidays, day-offs, and technician leave. " +
           "Click any date or Add event to create entries. " +
           "Use Filter for company-only or one technician. " +
-          "The Technicians Scheduler shows warn-only overlays on holidays and leave.",
+          "The Technicians Scheduler blocks leave hours like inactive technicians, and still warns on holidays.",
       },
       {
         label: "Attendance",
@@ -84,8 +84,8 @@ export const HELP_TIPS = [
     tips: [
       "Assign jobs from the Scheduler by dragging or using the assignment controls.",
       "Check technician availability and skills before assigning.",
-      "On Company Calendar (/company-calendar), click a date or Add event to create holidays or leave.",
-      "The Scheduler shows warn-only overlays when assigning on holidays or leave — assignments are still allowed.",
+      "On Company Calendar (/company-calendar), click a date or Add event to create holidays or leave. Technician leave can be all day or a start and end time.",
+      "The Scheduler hashes leave hours the same way it marks inactive technicians, so those slots cannot be assigned. Company holidays stay as a warning only.",
       "Use Filter on the calendar to show company-only events or a single technician.",
       "Attendance uses calendar data for expected hours and leave badges to spot punch mismatches.",
     ],

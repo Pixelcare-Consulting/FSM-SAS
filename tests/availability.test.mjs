@@ -8,9 +8,15 @@ import {
   getExpectedWorkForDay,
   getTechnicianAvailabilityIssues,
   companyEventsCoverDate,
+  technicianHasAllDayLeave,
+  technicianLeaveCoversSlot,
   technicianOnLeaveDate,
 } from "../lib/calendar/availability.js";
-import { eventCoversDate } from "../lib/calendar/calendarEvents.js";
+import {
+  eventCoversDate,
+  eventCoversDateTime,
+  eventCoversTimeSlot,
+} from "../lib/calendar/calendarEvents.js";
 import { DEFAULT_WORKER_SCHEDULE } from "../lib/technicians/employeeProfile.js";
 
 const schedule = DEFAULT_WORKER_SCHEDULE;
@@ -40,6 +46,17 @@ const calendarEvents = [
     title: "Annual Leave",
     startDate: "2026-06-16",
     endDate: "2026-06-16",
+  },
+  {
+    scope: "technician",
+    technicianId: "tech-1",
+    eventType: "leave",
+    title: "Morning leave",
+    startDate: "2026-06-17",
+    endDate: "2026-06-17",
+    allDay: false,
+    startTime: "08:00",
+    endTime: "13:00",
   },
 ];
 
@@ -89,5 +106,52 @@ assert.equal(
 
 assert.equal(companyEventsCoverDate(calendarEvents, "2026-08-09"), true);
 assert.equal(technicianOnLeaveDate(calendarEvents, "tech-1", "2026-06-16"), true);
+assert.equal(technicianHasAllDayLeave(calendarEvents, "tech-1", "2026-06-16"), true);
+assert.equal(technicianHasAllDayLeave(calendarEvents, "tech-1", "2026-06-17"), false);
+assert.equal(technicianOnLeaveDate(calendarEvents, "tech-1", "2026-06-17"), true);
+
+const morningLeave = calendarEvents.find((event) => event.title === "Morning leave");
+assert.equal(eventCoversDateTime(morningLeave, "2026-06-17T10:00:00+08:00"), true);
+assert.equal(eventCoversDateTime(morningLeave, "2026-06-17T14:00:00+08:00"), false);
+assert.equal(eventCoversTimeSlot(morningLeave, new Date("2026-06-17T08:00:00+08:00"), 30), true);
+assert.equal(eventCoversTimeSlot(morningLeave, new Date("2026-06-17T12:30:00+08:00"), 30), true);
+assert.equal(eventCoversTimeSlot(morningLeave, new Date("2026-06-17T13:00:00+08:00"), 30), false);
+
+const morningLeaveIssues = getTechnicianAvailabilityIssues({
+  dateLike: "2026-06-17T10:00:00+08:00",
+  employeeSchedule: schedule,
+  calendarEvents,
+  technicianId: "tech-1",
+});
+assert.equal(morningLeaveIssues.issues.includes(AVAILABILITY_ISSUE_TYPES.ON_LEAVE), true);
+
+const afternoonFreeIssues = getTechnicianAvailabilityIssues({
+  dateLike: "2026-06-17T14:00:00+08:00",
+  employeeSchedule: schedule,
+  calendarEvents,
+  technicianId: "tech-1",
+});
+assert.equal(afternoonFreeIssues.issues.includes(AVAILABILITY_ISSUE_TYPES.ON_LEAVE), false);
+
+assert.equal(
+  technicianLeaveCoversSlot(calendarEvents, "tech-1", new Date("2026-06-17T10:00:00+08:00")),
+  true
+);
+assert.equal(
+  technicianLeaveCoversSlot(calendarEvents, "tech-1", new Date("2026-06-17T14:00:00+08:00")),
+  false
+);
+
+const halfDayLeavePunchVariance = getAttendanceVarianceFlags({
+  ymd: "2026-06-17",
+  employeeSchedule: schedule,
+  calendarEvents,
+  technicianId: "tech-1",
+  punchCount: 1,
+});
+assert.equal(
+  halfDayLeavePunchVariance.some((v) => v.type === ATTENDANCE_VARIANCE_TYPES.LEAVE_BUT_PUNCHED),
+  true
+);
 
 console.log("availability tests passed");

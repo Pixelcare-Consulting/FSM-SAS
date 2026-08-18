@@ -10,6 +10,36 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.29.0',
+    date: '2026-08-18',
+    title: 'Scheduler keeps your date',
+    notes: [
+      'feature: The technician scheduler stays on the day you selected after you refresh the page',
+      'improvement: Day, week, and month stay in the page link so you can refresh or share the same view',
+      'fix: Changing the date and pressing refresh no longer jumps back to today',
+    ],
+  },
+  {
+    version: '3.28.0',
+    date: '2026-08-18',
+    title: 'Reassign several technicians',
+    notes: [
+      'feature: Reassign can set several technicians on a job in one step',
+      'improvement: Search and pick people as chips, with a before/after preview of the full crew. A highlighted note sits beside the picker and explains that current technicians must be selected again if they should stay on the job',
+      'fix: Confirming a smaller crew removes people who were not selected, so the board matches who is actually assigned',
+    ],
+  },
+  {
+    version: '3.27.0',
+    date: '2026-08-18',
+    title: 'Half-day technician leave',
+    notes: [
+      'feature: Technician leave can be all day or a start and end time, so morning or afternoon leave does not take the whole day.',
+      'improvement: You can edit or delete leave from the technician profile, and the scheduler hashes leave hours like inactive technicians so those times cannot be assigned.',
+      'fix: Afternoon hours stay open after morning leave, and company holidays still only warn when you assign.',
+    ],
+  },
+  {
     version: '3.26.1',
     date: '2026-08-17',
     title: 'Finished jobs stay Job Done',
