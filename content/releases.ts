@@ -10,6 +10,33 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.30.2',
+    date: '2026-08-18',
+    title: 'Job already on the service call',
+    notes: [
+      'fix: Updating a job no longer fails when the job is already on the SAP service call',
+      'fix: Assigning technicians no longer fills the activity log with repeated email warnings',
+    ],
+  },
+  {
+    version: '3.30.1',
+    date: '2026-08-18',
+    title: 'Service call stays on the job',
+    notes: [
+      'fix: Saving a job keeps the SAP service call, so assigned technicians still update in Document Automation',
+      'fix: SAP sync history can show the stored schedule technician after an update',
+    ],
+  },
+  {
+    version: '3.30.0',
+    date: '2026-08-18',
+    title: 'Job technicians update in SAP',
+    notes: [
+      'improvement: SAP sync history shows the technicians SAP stored after you save a job',
+      'fix: Editing a job now updates assigned technicians in SAP Document Automation',
+    ],
+  },
+  {
     version: '3.29.1',
     date: '2026-08-18',
     title: 'Job contact details stay visible',

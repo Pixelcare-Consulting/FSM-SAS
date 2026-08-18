@@ -7,7 +7,7 @@ import {
   fetchJobBundleForEmail,
   requestAppOrigin,
 } from '../../../lib/email/jobEmailContext';
-import { writeJobEmailAudit } from '../../../lib/services/auditLog';
+// import { writeJobEmailAudit } from '../../../lib/services/auditLog';
 
 /**
  * POST /api/email/job-assigned
@@ -110,15 +110,16 @@ export default async function handler(req, res) {
       messageId: sendResult.messageId,
     });
 
-    void writeJobEmailAudit({
-      req,
-      supabase,
-      jobId,
-      jobNumber: bundle?.job?.job_number,
-      templateKey: 'jobAssigned',
-      to,
-      result: sendResult,
-    });
+    // Disabled: skipped/WARNING rows spam the audit log for job assignment emails.
+    // void writeJobEmailAudit({
+    //   req,
+    //   supabase,
+    //   jobId,
+    //   jobNumber: bundle?.job?.job_number,
+    //   templateKey: 'jobAssigned',
+    //   to,
+    //   result: sendResult,
+    // });
   }
 
   return res.status(200).json({ ok: true, results });

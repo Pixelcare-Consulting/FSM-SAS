@@ -631,8 +631,27 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
   /** User edited address fields — write form values (incl. clears) and skip bare-address guard. */
   const [locationAddressTouched, setLocationAddressTouched] = useState(false);
   const [selectedWorkers, setSelectedWorkers] = useState([]);
-  const [selectedServiceCall, setSelectedServiceCall] = useState(null);
-  const [selectedSalesOrder, setSelectedSalesOrder] = useState(null);
+  const [selectedServiceCall, setSelectedServiceCall] = useState(() =>
+    initialJobData?.serviceCallID
+      ? {
+          value: initialJobData.serviceCallID,
+          label: String(initialJobData.serviceCallID),
+          serviceCallID: initialJobData.serviceCallID,
+        }
+      : null
+  );
+  const [selectedSalesOrder, setSelectedSalesOrder] = useState(() =>
+    initialJobData?.salesOrderID
+      ? {
+          value: initialJobData.salesOrderID,
+          label: String(initialJobData.salesOrderID),
+        }
+      : null
+  );
+  /** Explicit Service Call clear — honor null service_call_id on save even if job still has a stale FK. */
+  const [serviceCallClearedByUser, setServiceCallClearedByUser] = useState(false);
+  /** Explicit Sales Order clear — honor null sales_order_id on save even if job still has a stale FK. */
+  const [salesOrderClearedByUser, setSalesOrderClearedByUser] = useState(false);
   const [selectedJobContactType, setSelectedJobContactType] = useState(null);
 
   // Data lists
@@ -807,10 +826,14 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
         endDate: initialJobData.endDate || prev.endDate,
       }));
 
-      // Service call will be set after fetching from API in initializeFormData
-      // Don't set it here with just UUID - wait for API data
+      if (initialJobData.serviceCallID) {
+        setSelectedServiceCall((prev) => prev || {
+          value: initialJobData.serviceCallID,
+          label: String(initialJobData.serviceCallID),
+          serviceCallID: initialJobData.serviceCallID,
+        });
+      }
 
-      // Set sales order if available
       if (initialJobData.salesOrderID) {
         setSelectedSalesOrder(prev => prev || {
           value: initialJobData.salesOrderID,
@@ -2728,6 +2751,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
 
   const handleSelectedServiceCallChange = async (selectedServiceCall) => {
     setSelectedServiceCall(selectedServiceCall);
+    setServiceCallClearedByUser(!selectedServiceCall);
     setSelectedSalesOrder(null); // Reset sales order when service call changes
     setHasChanges(true);
 
@@ -3422,9 +3446,12 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
         }
       }
 
-      // Get or create service_call_id if service call is selected
+      // Get or create service_call_id if service call is selected.
+      // Empty picker must not wipe the FK unless the user explicitly cleared it.
       let serviceCallId = null;
-      if (selectedServiceCall?.value && customerId) {
+      if (serviceCallClearedByUser) {
+        serviceCallId = null;
+      } else if (selectedServiceCall?.value && customerId) {
         const { data: existingServiceCall } = await supabase
           .from('service_call')
           .select('id')
@@ -3456,11 +3483,16 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
             serviceCallId = newServiceCall.id;
           }
         }
+      } else {
+        serviceCallId = currentJobData?.service_call_id || null;
       }
 
-      // Get or create sales_order_id if sales order is selected
+      // Get or create sales_order_id if sales order is selected.
+      // Empty picker must not wipe the FK unless the user explicitly cleared it.
       let salesOrderId = null;
-      if (selectedSalesOrder?.value) {
+      if (salesOrderClearedByUser) {
+        salesOrderId = null;
+      } else if (selectedSalesOrder?.value) {
         const { data: existingSalesOrder } = await supabase
           .from('sales_order')
           .select('id')
@@ -3488,6 +3520,8 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
             salesOrderId = newSalesOrder.id;
           }
         }
+      } else {
+        salesOrderId = currentJobData?.sales_order_id || null;
       }
 
       const contactId = await resolveContactIdFromSelection(supabase, {
@@ -3558,14 +3592,6 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
           console.warn('Failed to persist job_category:', jobCatErr?.message || jobCatErr);
         }
       }
-
-      // Phase 2: Sync job to SAP (non-blocking)
-      fetch('/api/jobs/sync-to-sap', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId: jobIdProp }),
-        credentials: 'include'
-      }).then(r => { if (!r.ok) console.warn('SAP job sync failed'); }).catch(e => console.warn('SAP job sync error', e));
 
       // 2. Update job_tasks - smart sync to preserve created_at on existing rows
       const filteredTasks = tasks.filter(task => !task.isDeleted);
@@ -3832,6 +3858,14 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
           }
         }
       }
+
+      // Phase 2: Sync job to SAP after technician_jobs and job_schedule.job_tech are saved
+      fetch('/api/jobs/sync-to-sap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId: jobIdProp }),
+        credentials: 'include'
+      }).then(r => { if (!r.ok) console.warn('SAP job sync failed'); }).catch(e => console.warn('SAP job sync error', e));
 
       setProgress(80);
 
@@ -4775,6 +4809,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
                   value={selectedSalesOrder}
                   onChange={(selectedOption) => {
                     setSelectedSalesOrder(selectedOption);
+                    setSalesOrderClearedByUser(!selectedOption);
                     setHasChanges(true);
                   }}
                   onMenuOpen={() => {
