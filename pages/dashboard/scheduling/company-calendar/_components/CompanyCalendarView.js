@@ -18,6 +18,7 @@ import {
   CALENDAR_EVENT_COLORS,
   CALENDAR_EVENT_TYPE_LABELS,
   eventCoversDate,
+  formatEventTimeRange,
 } from "../../../../../lib/calendar/calendarEvents";
 import { companyEventsCoverDate } from "../../../../../lib/calendar/availability";
 import CalendarEventForm from "./CalendarEventForm";
@@ -254,8 +255,10 @@ export default function CompanyCalendarView() {
                       event.scope === "technician" && event.technicianId
                         ? technicianNameById.get(event.technicianId)
                         : null;
+                    const timeRange = formatEventTimeRange(event);
                     const tooltipParts = [typeLabel, event.title];
                     if (technicianName) tooltipParts.push(technicianName);
+                    if (timeRange) tooltipParts.push(timeRange);
                     return (
                       <div
                         key={`${event.id}-${dayYmd}`}
@@ -271,6 +274,9 @@ export default function CompanyCalendarView() {
                           <span className={styles.calendarEventBadgeType}>{typeLabel}</span>
                           {technicianName && (
                             <span className={styles.calendarEventBadgeTech}>{technicianName}</span>
+                          )}
+                          {timeRange && (
+                            <span className={styles.calendarEventBadgeTech}>{timeRange}</span>
                           )}
                         </div>
                         <div className={styles.calendarEventBadgeTitle}>{event.title}</div>

@@ -90,7 +90,7 @@ import {
 } from '@tanstack/react-table';
 import { DebouncedInput } from '../../../../components/DebouncedInput';
 import { EmployeeScheduleTab } from '../../../../sub-components/dashboard/worker/EmployeeProfileTabs';
-import { fetchCalendarEventsForRange } from '../../../../lib/calendar/calendarEvents';
+import { fetchCalendarEventsForRange, formatCalendarEventWhen } from '../../../../lib/calendar/calendarEvents';
 import CalendarEventForm from '../../scheduling/company-calendar/_components/CalendarEventForm';
 // Supabase storage imported above
 
@@ -357,6 +357,8 @@ const TechnicianDetails = () => {
   const [upcomingLeave, setUpcomingLeave] = useState([]);
   const [loadingUpcomingLeave, setLoadingUpcomingLeave] = useState(false);
   const [showLeaveForm, setShowLeaveForm] = useState(false);
+  const [editingLeaveEvent, setEditingLeaveEvent] = useState(null);
+  const [deletingLeaveId, setDeletingLeaveId] = useState(null);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [incentiveRateInput, setIncentiveRateInput] = useState('0');
   const [savingIncentiveRate, setSavingIncentiveRate] = useState(false);
@@ -422,6 +424,43 @@ const TechnicianDetails = () => {
       loadUpcomingLeave();
     }
   }, [activeTab, loadUpcomingLeave]);
+
+  const handleOpenAddLeave = () => {
+    setEditingLeaveEvent(null);
+    setShowLeaveForm(true);
+  };
+
+  const handleOpenEditLeave = (event) => {
+    setEditingLeaveEvent(event);
+    setShowLeaveForm(true);
+  };
+
+  const handleHideLeaveForm = () => {
+    setShowLeaveForm(false);
+    setEditingLeaveEvent(null);
+  };
+
+  const handleDeleteLeave = async (event) => {
+    if (!event?.id) return;
+    if (!window.confirm(`Delete "${event.title}"?`)) return;
+    setDeletingLeaveId(event.id);
+    try {
+      const response = await fetch(
+        `/api/calendar/events?id=${encodeURIComponent(event.id)}`,
+        { method: 'DELETE', credentials: 'include' }
+      );
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(body.error || body.message || 'Failed to delete leave');
+      }
+      toast.success('Leave deleted');
+      await loadUpcomingLeave();
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete leave');
+    } finally {
+      setDeletingLeaveId(null);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -2336,7 +2375,7 @@ const TechnicianDetails = () => {
                   <Button
                     variant="outline-primary"
                     size="sm"
-                    onClick={() => setShowLeaveForm(true)}
+                    onClick={handleOpenAddLeave}
                     disabled={!technician?.technicianId}
                   >
                     Add leave
@@ -2358,6 +2397,7 @@ const TechnicianDetails = () => {
                         <th>Title</th>
                         <th>Type</th>
                         <th>Dates</th>
+                        <th className="text-end">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2369,10 +2409,26 @@ const TechnicianDetails = () => {
                               {event.eventType}
                             </Badge>
                           </td>
-                          <td>
-                            {event.startDate === event.endDate
-                              ? event.startDate
-                              : `${event.startDate} – ${event.endDate}`}
+                          <td>{formatCalendarEventWhen(event)}</td>
+                          <td className="text-end">
+                            <div className="d-inline-flex align-items-center gap-2">
+                              <Button
+                                variant="outline-primary"
+                                size="sm"
+                                onClick={() => handleOpenEditLeave(event)}
+                                disabled={deletingLeaveId === event.id}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                onClick={() => handleDeleteLeave(event)}
+                                disabled={deletingLeaveId === event.id}
+                              >
+                                {deletingLeaveId === event.id ? 'Deleting…' : 'Delete'}
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2388,12 +2444,18 @@ const TechnicianDetails = () => {
             />
             <CalendarEventForm
               show={showLeaveForm}
-              onHide={() => setShowLeaveForm(false)}
-              onSaved={() => {
-                setShowLeaveForm(false);
+              onHide={handleHideLeaveForm}
+              onSaved={(saved) => {
+                const wasEdit = Boolean(editingLeaveEvent);
+                handleHideLeaveForm();
                 loadUpcomingLeave();
-                toast.success('Leave saved');
+                if (saved == null && wasEdit) {
+                  toast.success('Leave deleted');
+                } else {
+                  toast.success(wasEdit ? 'Leave updated' : 'Leave saved');
+                }
               }}
+              initialEvent={editingLeaveEvent}
               technicians={
                 technician?.technicianId
                   ? [{ id: technician.technicianId, text: technician.name || technician.fullName }]

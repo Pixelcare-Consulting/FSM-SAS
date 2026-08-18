@@ -24,6 +24,9 @@ function calendarAuditSnapshot(event) {
     title: event.title,
     startDate: event.startDate,
     endDate: event.endDate,
+    allDay: event.allDay,
+    startTime: event.startTime,
+    endTime: event.endTime,
     technicianId: event.technicianId,
   };
 }

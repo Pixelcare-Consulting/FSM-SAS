@@ -10,6 +10,16 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.27.0',
+    date: '2026-08-18',
+    title: 'Half-day technician leave',
+    notes: [
+      'feature: Technician leave can be all day or a start and end time, so morning or afternoon leave does not take the whole day.',
+      'improvement: You can edit or delete leave from the technician profile, and the scheduler hashes leave hours like inactive technicians so those times cannot be assigned.',
+      'fix: Afternoon hours stay open after morning leave, and company holidays still only warn when you assign.',
+    ],
+  },
+  {
     version: '3.26.1',
     date: '2026-08-17',
     title: 'Finished jobs stay Job Done',

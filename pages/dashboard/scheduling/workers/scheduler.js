@@ -46,6 +46,8 @@ import {
   AVAILABILITY_ISSUE_TYPES,
   companyEventsCoverDate,
   getTechnicianAvailabilityIssues,
+  technicianHasAllDayLeave,
+  technicianLeaveCoversSlot,
   technicianOnLeaveDate,
 } from "../../../../lib/calendar/availability";
 import { toSingaporeYmd, buildSingaporeDateTimeFromForm } from "../../../../lib/utils/singaporeDateTime";
@@ -930,9 +932,17 @@ const Scheduler = () => {
   };
 
 
-  const handleCellClick = (tech, startDate) => {
+  const handleCellClick = (tech, startDate, { blockTimedLeave = true } = {}) => {
     if (!isTechnicianActive(tech)) {
       // toast.info(`${tech?.text || tech?.name || "This technician"} is inactive and unavailable for new assignments.`);
+      return;
+    }
+
+    const ymd = toSingaporeYmd(startDate);
+    if (technicianHasAllDayLeave(calendarEvents, tech?.id, ymd)) {
+      return;
+    }
+    if (blockTimedLeave && technicianLeaveCoversSlot(calendarEvents, tech?.id, startDate)) {
       return;
     }
 
@@ -1684,6 +1694,7 @@ const Scheduler = () => {
                     DAILY_LANE_HEIGHT_PX * rowLanes
                   );
                   const onLeave = technicianOnLeaveDate(calendarEvents, tech.id, dayYmd);
+                  const onAllDayLeave = technicianHasAllDayLeave(calendarEvents, tech.id, dayYmd);
                   const companyDay = companyEventsCoverDate(calendarEvents, dayYmd);
 
                   return (
@@ -1723,7 +1734,7 @@ const Scheduler = () => {
 
                       {/* Day Column with Timeline and Jobs */}
                       <div 
-                        className={`${styles.dailyTimelineCell} ${!technicianActive ? styles.inactiveWorkerTimeline : ''} ${
+                        className={`${styles.dailyTimelineCell} ${!technicianActive || onAllDayLeave ? styles.inactiveWorkerTimeline : ''} ${
                           onLeave ? styles.technicianLeaveDayCell : ""
                         } ${companyDay ? styles.companyCalendarDayCell : ""}`}
                         style={{ minHeight: rowHeight, height: rowHeight }}
@@ -1733,19 +1744,27 @@ const Scheduler = () => {
                           <div className={styles.dailyTimeCellStrip}>
                             {Array.from({ length: 48 }, (_, i) => {
                               const { hour, minute } = getTimeFromSlotIndex(i);
+                              const slotDate = new Date(selectedDate);
+                              slotDate.setHours(hour, minute, 0, 0);
+                              const slotOnLeave = technicianLeaveCoversSlot(
+                                calendarEvents,
+                                tech.id,
+                                slotDate
+                              );
+                              const slotBlocked = !technicianActive || slotOnLeave;
                               return (
                                 <div 
                                   key={i} 
-                                  className={`${styles.dailyTimeCell} ${!technicianActive ? styles.inactiveTimeCell : ''}`}
+                                  className={`${styles.dailyTimeCell} ${slotBlocked ? styles.inactiveTimeCell : ''}`}
                                   onClick={() => {
-                                    const clickDate = new Date(selectedDate);
-                                    clickDate.setHours(hour, minute, 0, 0);
-                                    handleCellClick(tech, clickDate);
+                                    handleCellClick(tech, slotDate);
                                   }}
                                   title={
-                                    technicianActive
-                                      ? `Click to assign job at ${hour}:${minute.toString().padStart(2, '0')}`
-                                      : `${tech.text || tech.name || 'Technician'} is inactive and unavailable`
+                                    !technicianActive
+                                      ? `${tech.text || tech.name || 'Technician'} is inactive and unavailable`
+                                      : slotOnLeave
+                                        ? `${tech.text || tech.name || 'Technician'} is on leave at this time`
+                                        : `Click to assign job at ${hour}:${minute.toString().padStart(2, '0')}`
                                   }
                                 ></div>
                               );
@@ -1875,6 +1894,7 @@ const Scheduler = () => {
                         const day = addDays(weekStart, dayIndex);
                         const dayYmd = toSingaporeYmd(day);
                         const onLeave = technicianOnLeaveDate(calendarEvents, tech.id, dayYmd);
+                        const onAllDayLeave = technicianHasAllDayLeave(calendarEvents, tech.id, dayYmd);
                         const companyDay = companyEventsCoverDate(calendarEvents, dayYmd);
 
                         const techJobs = getEventsForTechAndDay(eventsByTechAndDay, tech.id, dayYmd)
@@ -1883,22 +1903,24 @@ const Scheduler = () => {
                         return (
                           <div 
                             key={dayIndex} 
-                            className={`${styles.weeklyDayCell} ${!technicianActive ? styles.inactiveWeeklyDayCell : ''} ${
-                              onLeave ? styles.technicianLeaveDayCell : ""
+                            className={`${styles.weeklyDayCell} ${!technicianActive || onAllDayLeave ? styles.inactiveWeeklyDayCell : ''} ${
+                              onLeave && !onAllDayLeave ? styles.technicianLeaveDayCell : ""
                             } ${companyDay ? styles.companyCalendarDayCell : ""}`}
                             title={
                               !technicianActive
                                 ? `${tech.text || tech.name || "Technician"} is inactive and unavailable`
-                                : onLeave
-                                  ? "Technician on approved leave — click to assign"
-                                  : companyDay
-                                    ? "Company holiday or day off — click to assign"
-                                    : "Click to assign job"
+                                : onAllDayLeave
+                                  ? "Technician on approved leave — unavailable for new assignments"
+                                  : onLeave
+                                    ? "Technician on leave for part of this day — click to assign other hours"
+                                    : companyDay
+                                      ? "Company holiday or day off — click to assign"
+                                      : "Click to assign job"
                             }
                             onClick={() => {
                               const clickDate = new Date(day);
                               clickDate.setHours(12, 0, 0, 0);
-                              handleCellClick(tech, clickDate);
+                              handleCellClick(tech, clickDate, { blockTimedLeave: false });
                             }}
                           >
                             <div className={styles.weeklyDayJobs}>
