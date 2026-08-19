@@ -4,6 +4,7 @@
  * Body:
  *   { preview: true } — counts only, no sync
  *   { stream: true, syncAll: true } — SSE live sync (all unsynced jobs)
+ *   { includeSynced: true, dateFrom, dateTo } — also update jobs already in SAP (date range required)
  *   { limit?: number } — capped batch (cron/scripts)
  *
  * Requires SAP session cookies (except preview-only without SAP — preview doesn't need SAP).
@@ -13,9 +14,11 @@ import { getSupabaseAdmin } from '../../../lib/supabase/server';
 import sapService from '../../../lib/services/sapService';
 import {
   countJobs,
-  fetchAllUnsyncedJobRows,
+  fetchJobsForSapSync,
+  getIncludeSyncedDateRangeError,
   getSyncPreview,
   parseDateFilter,
+  parseIncludeSynced,
   resolveBatchLimit,
   runBatchSync,
   SYNC_CONCURRENCY,
@@ -89,6 +92,14 @@ export default async function handler(req, res) {
 
   const body = parseBody(req);
   const dateFilter = parseDateFilter(body);
+  const includeSynced = parseIncludeSynced(body);
+  const includeSyncedDateError = getIncludeSyncedDateRangeError(includeSynced, dateFilter);
+  if (includeSyncedDateError) {
+    return res.status(400).json({
+      success: false,
+      error: includeSyncedDateError,
+    });
+  }
 
   let supabase;
   try {
@@ -99,7 +110,7 @@ export default async function handler(req, res) {
 
   if (body.preview === true) {
     try {
-      const preview = await getSyncPreview(supabase, dateFilter);
+      const preview = await getSyncPreview(supabase, dateFilter, { includeSynced });
       return res.status(200).json(preview);
     } catch (e) {
       return res.status(500).json({ success: false, error: e?.message || 'Preview failed' });
@@ -120,12 +131,16 @@ export default async function handler(req, res) {
 
   if (!useStream) {
     try {
-      const totalUnsynced = await countJobs(supabase, { unsyncedOnly: true, dateFilter });
-      const limit = resolveBatchLimit(body, totalUnsynced);
-      const jobs = await fetchAllUnsyncedJobRows(supabase, limit, dateFilter);
+      const preview = await getSyncPreview(supabase, dateFilter, { includeSynced });
+      const totalUnsynced = preview.unsyncedJobs;
+      const limit = resolveBatchLimit(body, preview.toProcess);
+      const jobs = await fetchJobsForSapSync(supabase, limit, dateFilter, { includeSynced });
       await logJobSyncLifecycle(req, 'started', {
         processed: jobs.length,
         totalUnsynced,
+        includeSynced,
+        syncedInRange: preview.syncedInRange,
+        toProcess: preview.toProcess,
         syncAll: body?.syncAll === true,
         dateFrom: dateFilter?.dateFrom ?? null,
         dateTo: dateFilter?.dateTo ?? null,
@@ -139,6 +154,8 @@ export default async function handler(req, res) {
         processed: jobs.length,
         totalUnsynced,
         remainingUnsynced,
+        includeSynced,
+        syncedInRange: preview.syncedInRange,
         syncAll: body?.syncAll === true,
         dateFrom: dateFilter?.dateFrom ?? null,
         dateTo: dateFilter?.dateTo ?? null,
@@ -148,6 +165,8 @@ export default async function handler(req, res) {
         success: true,
         message: `Synced ${results.synced} jobs, ${results.failed} failed`,
         totalUnsynced,
+        includeSynced,
+        syncedInRange: preview.syncedInRange,
         processed: jobs.length,
         remainingUnsynced,
         concurrency: SYNC_CONCURRENCY,
@@ -178,9 +197,9 @@ export default async function handler(req, res) {
   } catch (_) {}
 
   try {
-    const preview = await getSyncPreview(supabase, dateFilter);
+    const preview = await getSyncPreview(supabase, dateFilter, { includeSynced });
     const totalUnsynced = preview.unsyncedJobs;
-    const limit = resolveBatchLimit(body, totalUnsynced);
+    const limit = resolveBatchLimit(body, preview.toProcess);
 
     send({
       type: 'start',
@@ -188,6 +207,9 @@ export default async function handler(req, res) {
       totalUnsyncedAll: preview.totalUnsyncedAll,
       totalJobs: preview.totalJobs,
       syncedJobs: preview.syncedJobs,
+      syncedInRange: preview.syncedInRange,
+      includeSynced,
+      toProcess: preview.toProcess,
       processing: limit,
       syncAll: body.syncAll === true,
       concurrency: SYNC_CONCURRENCY,
@@ -195,19 +217,26 @@ export default async function handler(req, res) {
       dateFrom: preview.dateFrom,
       dateTo: preview.dateTo,
       message:
-        totalUnsynced === 0
-          ? preview.message || 'No unsynced jobs found.'
-          : `Syncing ${limit.toLocaleString()} unsynced job(s) to SAP (${SYNC_CONCURRENCY} parallel)…`,
+        preview.toProcess === 0
+          ? preview.message || 'No jobs to sync.'
+          : includeSynced
+            ? `Syncing ${limit.toLocaleString()} job(s) to SAP (${SYNC_CONCURRENCY} parallel), including updates for jobs already in SAP…`
+            : `Syncing ${limit.toLocaleString()} unsynced job(s) to SAP (${SYNC_CONCURRENCY} parallel)…`,
     });
 
-    if (totalUnsynced === 0 || limit === 0) {
-      await logJobSyncLifecycle(req, 'started', { processed: 0, totalUnsynced: 0 });
+    if (preview.toProcess === 0 || limit === 0) {
+      await logJobSyncLifecycle(req, 'started', {
+        processed: 0,
+        totalUnsynced: 0,
+        includeSynced,
+      });
       await logJobSyncLifecycle(req, 'completed', {
         synced: 0,
         failed: 0,
         processed: 0,
         totalUnsynced: 0,
         remainingUnsynced: 0,
+        includeSynced,
       });
       send({
         type: 'done',
@@ -216,9 +245,10 @@ export default async function handler(req, res) {
         failed: 0,
         errors: [],
         totalUnsynced: 0,
+        includeSynced,
         processed: 0,
         remainingUnsynced: 0,
-        message: 'No unsynced jobs to sync.',
+        message: preview.message || 'No jobs to sync.',
       });
       res.end();
       return;
@@ -230,11 +260,14 @@ export default async function handler(req, res) {
       message: `Loaded ${limit.toLocaleString()} job(s). Do not refresh until complete.`,
     });
 
-    const jobs = await fetchAllUnsyncedJobRows(supabase, limit, dateFilter);
+    const jobs = await fetchJobsForSapSync(supabase, limit, dateFilter, { includeSynced });
 
     await logJobSyncLifecycle(req, 'started', {
       processed: jobs.length,
       totalUnsynced,
+      includeSynced,
+      syncedInRange: preview.syncedInRange,
+      toProcess: preview.toProcess,
       syncAll: body.syncAll === true,
       stream: true,
       dateFrom: preview.dateFrom,
@@ -258,6 +291,8 @@ export default async function handler(req, res) {
       processed: jobs.length,
       totalUnsynced,
       remainingUnsynced,
+      includeSynced,
+      syncedInRange: preview.syncedInRange,
       syncAll: body.syncAll === true,
       stream: true,
       dateFrom: preview.dateFrom,
@@ -269,6 +304,7 @@ export default async function handler(req, res) {
       success: true,
       message: `Synced ${results.synced} jobs, ${results.failed} failed`,
       totalUnsynced,
+      includeSynced,
       processed: jobs.length,
       remainingUnsynced,
       concurrency: SYNC_CONCURRENCY,
@@ -278,6 +314,7 @@ export default async function handler(req, res) {
     await logJobSyncLifecycle(req, 'completed', {
       error: e?.message || 'Sync failed',
       stream: true,
+      includeSynced,
       dateFrom: dateFilter?.dateFrom ?? null,
       dateTo: dateFilter?.dateTo ?? null,
     });

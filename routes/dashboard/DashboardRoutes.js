@@ -306,7 +306,8 @@ export const DashboardMenu = [
 			{ id: uuid(), link: '/dashboard/settings/social', name: 'Social' },
 			{ id: uuid(), link: '/dashboard/settings/social-login', name: 'Social Login' },
 			{ id: uuid(), link: '/dashboard/settings/payment', name: 'Payment' },
-			{ id: uuid(), link: '/dashboard/settings#incentives', name: 'Job Incentives' },
+			// Hidden from Settings until Job Incentives is re-enabled
+			// { id: uuid(), link: '/dashboard/settings#incentives', name: 'Job Incentives' },
 			{ id: uuid(), link: '/dashboard/settings/smtp-server', name: 'SMPT' }
 		]
 	},

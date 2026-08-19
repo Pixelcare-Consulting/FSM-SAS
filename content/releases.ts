@@ -10,6 +10,24 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.31.0',
+    date: '2026-08-19',
+    title: 'Sync Jobs can update jobs already in SAP',
+    notes: [
+      'feature: Sync Jobs can update jobs already in SAP for a chosen date range so they stay ready to invoice in Document Automation',
+      'improvement: Sync Jobs preview shows how many jobs are new versus already in SAP',
+      'improvement: Profile is temporarily hidden from the account menu',
+    ],
+  },
+  {
+    version: '3.30.7',
+    date: '2026-08-19',
+    title: 'Job Incentives hidden from Settings',
+    notes: [
+      'improvement: Job Incentives is temporarily hidden from Settings',
+    ],
+  },
+  {
     version: '3.30.6',
     date: '2026-08-18',
     title: 'Create Job still loads service calls',

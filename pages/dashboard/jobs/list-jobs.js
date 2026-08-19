@@ -394,6 +394,7 @@ const ViewJobs = () => {
     totalJobs: 0,
     syncedJobs: 0,
     unsyncedJobs: 0,
+    syncedInRange: 0,
     totalUnsyncedAll: 0,
     hasDateFilter: false,
     concurrency: 4,
@@ -404,6 +405,7 @@ const ViewJobs = () => {
     dateFrom: null,
     dateTo: null,
   });
+  const [syncIncludeSynced, setSyncIncludeSynced] = useState(false);
   const [syncResultModal, setSyncResultModal] = useState({
     show: false,
     synced: 0,
@@ -995,7 +997,6 @@ const ViewJobs = () => {
 
   // MUI Table columns definition — wrapped in useMemo so render functions always close
   // over the latest jobStatuses and don't stale-capture the initial gray default values.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const muiColumns = useMemo(() => [
     {
       id: "jobNo",
@@ -1861,12 +1862,13 @@ const ViewJobs = () => {
     getJobStatusColorFromList(status, jobStatuses) ?? "var(--bs-secondary)";
 
 
-  const fetchSyncPreview = useCallback(async (dateFrom, dateTo) => {
+  const fetchSyncPreview = useCallback(async (dateFrom, dateTo, includeSynced = false) => {
     setSyncSapConfirm((prev) => ({ ...prev, loading: true, error: null }));
     try {
       const payload = { preview: true };
       if (dateFrom) payload.dateFrom = dateFrom;
       if (dateTo) payload.dateTo = dateTo;
+      if (includeSynced) payload.includeSynced = true;
 
       const res = await fetch('/api/jobs/sync-hourly', {
         method: 'POST',
@@ -1884,6 +1886,7 @@ const ViewJobs = () => {
         totalJobs: data.totalJobs ?? 0,
         syncedJobs: data.syncedJobs ?? 0,
         unsyncedJobs: data.unsyncedJobs ?? 0,
+        syncedInRange: data.syncedInRange ?? data.syncedJobs ?? 0,
         totalUnsyncedAll: data.totalUnsyncedAll ?? data.unsyncedJobs ?? 0,
         hasDateFilter: data.hasDateFilter ?? Boolean(dateFrom || dateTo),
         concurrency: data.concurrency ?? 4,
@@ -1899,6 +1902,7 @@ const ViewJobs = () => {
   }, []);
 
   const openSyncSapConfirm = () => {
+    setSyncIncludeSynced(false);
     setSyncDateFilter({ preset: 'all', dateFrom: null, dateTo: null });
     setSyncSapConfirm({
       show: true,
@@ -1906,12 +1910,13 @@ const ViewJobs = () => {
       totalJobs: 0,
       syncedJobs: 0,
       unsyncedJobs: 0,
+      syncedInRange: 0,
       totalUnsyncedAll: 0,
       hasDateFilter: false,
       concurrency: 4,
       error: null,
     });
-    fetchSyncPreview(null, null);
+    fetchSyncPreview(null, null, false);
   };
 
   const applySyncDatePreset = (presetId) => {
@@ -1920,15 +1925,27 @@ const ViewJobs = () => {
       return;
     }
     const range = getSyncDatePresetRange(presetId);
+    const nextIncludeSynced = presetId === 'all' ? false : syncIncludeSynced;
+    if (presetId === 'all') setSyncIncludeSynced(false);
     setSyncDateFilter({ preset: presetId, ...range });
-    fetchSyncPreview(range.dateFrom, range.dateTo);
+    fetchSyncPreview(range.dateFrom, range.dateTo, nextIncludeSynced);
   };
 
   const applyCustomSyncDateFilter = () => {
-    fetchSyncPreview(syncDateFilter.dateFrom, syncDateFilter.dateTo);
+    fetchSyncPreview(syncDateFilter.dateFrom, syncDateFilter.dateTo, syncIncludeSynced);
+  };
+
+  const handleIncludeSyncedChange = (checked) => {
+    const hasRange = Boolean(syncDateFilter.dateFrom || syncDateFilter.dateTo);
+    if (checked && !hasRange) return;
+    setSyncIncludeSynced(checked);
+    fetchSyncPreview(syncDateFilter.dateFrom, syncDateFilter.dateTo, checked);
   };
 
   const runSyncToSap = async () => {
+    const hasRange = Boolean(syncDateFilter.dateFrom || syncDateFilter.dateTo);
+    if (syncIncludeSynced && !hasRange) return;
+
     setSyncSapConfirm((prev) => ({ ...prev, show: false }));
     setSyncToSapLoading(true);
     setSyncToSapElapsed(0);
@@ -1938,6 +1955,7 @@ const ViewJobs = () => {
       const syncPayload = { stream: true, syncAll: true };
       if (syncDateFilter.dateFrom) syncPayload.dateFrom = syncDateFilter.dateFrom;
       if (syncDateFilter.dateTo) syncPayload.dateTo = syncDateFilter.dateTo;
+      if (syncIncludeSynced) syncPayload.includeSynced = true;
 
       const res = await fetch('/api/jobs/sync-hourly', {
         method: 'POST',
@@ -2086,6 +2104,12 @@ const ViewJobs = () => {
   const handleSyncToSap = () => {
     openSyncSapConfirm();
   };
+
+  const canStartJobSync =
+    syncSapConfirm.unsyncedJobs > 0 ||
+    (syncIncludeSynced && (syncSapConfirm.syncedInRange ?? 0) > 0);
+  const jobSyncStartCount =
+    syncSapConfirm.unsyncedJobs + (syncIncludeSynced ? syncSapConfirm.syncedInRange ?? 0 : 0);
 
   /**
    * Link AIFM jobs (no customer_id + [CUSTOMER:…] in description) to customers.
@@ -2543,7 +2567,7 @@ const ViewJobs = () => {
               Sync jobs to SAP
             </Modal.Title>
             <p className="text-muted small mb-0 mt-1">
-              Choose which unsynced jobs to send — filter by created date before proceeding.
+              Choose which jobs to send — filter by created date before proceeding.
             </p>
           </div>
         </Modal.Header>
@@ -2575,7 +2599,7 @@ const ViewJobs = () => {
                       size="sm"
                       variant={syncDateFilter.preset === p.id ? 'primary' : 'outline-secondary'}
                       onClick={() => applySyncDatePreset(p.id)}
-                      disabled={syncSapConfirm.loading}
+                      disabled={syncSapConfirm.loading || (p.id === 'all' && syncIncludeSynced)}
                     >
                       {p.label}
                     </Button>
@@ -2626,6 +2650,27 @@ const ViewJobs = () => {
                     </Col>
                   </Row>
                 )}
+                <div className="mt-3 pt-3 border-top">
+                  <Form.Check
+                    type="checkbox"
+                    id="sync-include-synced"
+                    label="Also update jobs already in SAP"
+                    checked={syncIncludeSynced}
+                    disabled={
+                      syncSapConfirm.loading ||
+                      syncDateFilter.preset === 'all' ||
+                      (!syncDateFilter.dateFrom && !syncDateFilter.dateTo)
+                    }
+                    onChange={(e) => handleIncludeSyncedChange(e.target.checked)}
+                  />
+                  {(syncDateFilter.preset === 'all' ||
+                    (!syncDateFilter.dateFrom && !syncDateFilter.dateTo)) && (
+                    <div className="text-muted small mt-1">
+                      Pick today or a date range to update jobs already in SAP. All is not available for that
+                      option.
+                    </div>
+                  )}
+                </div>
               </div>
 
               <Row className="g-2 mb-3">
@@ -2637,12 +2682,21 @@ const ViewJobs = () => {
                   </div>
                 </Col>
                 <Col xs={4}>
-                  <div className="border rounded p-3 text-center h-100 bg-light">
+                  <div
+                    className={`border rounded p-3 text-center h-100 ${syncIncludeSynced ? '' : 'bg-light'}`}
+                    style={
+                      syncIncludeSynced
+                        ? { backgroundColor: '#fefce8', borderColor: '#facc15' }
+                        : undefined
+                    }
+                  >
                     <div className="text-muted small">Already in SAP</div>
-                    <div className="fw-bold fs-4 text-success">
-                      {syncSapConfirm.syncedJobs.toLocaleString()}
+                    <div className={`fw-bold fs-4 ${syncIncludeSynced ? 'text-warning' : 'text-success'}`}>
+                      {(syncSapConfirm.syncedInRange ?? syncSapConfirm.syncedJobs).toLocaleString()}
                     </div>
-                    <div className="text-muted" style={{ fontSize: 11 }}>in range</div>
+                    <div className="text-muted" style={{ fontSize: 11 }}>
+                      {syncIncludeSynced ? 'will be updated' : 'skipped (in range)'}
+                    </div>
                   </div>
                 </Col>
                 <Col xs={4}>
@@ -2651,12 +2705,12 @@ const ViewJobs = () => {
                     style={{ backgroundColor: '#eff6ff', borderColor: '#93c5fd' }}
                   >
                     <div className="small" style={{ color: '#1e40af' }}>
-                      To sync
+                      Unsynced
                     </div>
                     <div className="fw-bold fs-4" style={{ color: '#2563eb' }}>
                       {syncSapConfirm.unsyncedJobs.toLocaleString()}
                     </div>
-                    <div style={{ fontSize: 11, color: '#64748b' }}>unsynced in range</div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>new in range</div>
                   </div>
                 </Col>
               </Row>
@@ -2669,14 +2723,19 @@ const ViewJobs = () => {
                   </p>
                 )}
 
-              {syncSapConfirm.unsyncedJobs === 0 ? (
+              {syncSapConfirm.unsyncedJobs === 0 &&
+              !(syncIncludeSynced && (syncSapConfirm.syncedInRange ?? 0) > 0) ? (
                 <Alert variant="success" className="mb-0 small">
-                  No unsynced jobs match this filter. Try a wider date range or &quot;All unsynced&quot;.
+                  No unsynced jobs match this filter. Try a wider date range or &quot;All unsynced&quot;, or
+                  choose a date range and update jobs already in SAP.
                 </Alert>
               ) : (
                 <Alert variant="warning" className="mb-0 small">
                   <strong>Important:</strong> Keep this tab open during sync. Do not refresh — it can cause data
                   loss or duplicate SAP records. Uses {syncSapConfirm.concurrency} parallel workers.
+                  {syncIncludeSynced
+                    ? ' Jobs already in SAP will be updated, not created twice.'
+                    : ''}
                 </Alert>
               )}
             </>
@@ -2697,11 +2756,11 @@ const ViewJobs = () => {
               syncSapConfirm.loading ||
               syncToSapLoading ||
               Boolean(syncSapConfirm.error) ||
-              syncSapConfirm.unsyncedJobs === 0
+              !canStartJobSync
             }
           >
             Proceed to sync
-            {syncSapConfirm.unsyncedJobs > 0 ? ` (${syncSapConfirm.unsyncedJobs.toLocaleString()})` : ''}
+            {canStartJobSync ? ` (${jobSyncStartCount.toLocaleString()})` : ''}
           </Button>
         </Modal.Footer>
       </Modal>
@@ -3533,8 +3592,9 @@ const ViewJobs = () => {
                         placement="bottom"
                         overlay={
                           <Tooltip id="jobs-sync-sap-tooltip" style={{ maxWidth: 320 }}>
-                            Sync unsynced jobs to SAP. Preview with date filter (today, range, or all). Keep the
-                            tab open during sync — do not refresh.
+                            Syncs jobs that are not in SAP by default. Optionally update jobs already in SAP for
+                            a selected date range (today or custom dates — not All). Keep the tab open during
+                            sync — do not refresh.
                           </Tooltip>
                         }
                       >

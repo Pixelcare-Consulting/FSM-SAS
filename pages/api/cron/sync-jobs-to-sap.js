@@ -124,6 +124,7 @@ export default async function handler(req, res) {
     }
 
     const sessionCookies = sapLogin.cookies;
+    // Cron remains unsynced-only (never includeSynced).
     const totalUnsynced = await countJobs(supabase, { unsyncedOnly: true });
     const jobs = await fetchAllUnsyncedJobRows(supabase, limit);
 

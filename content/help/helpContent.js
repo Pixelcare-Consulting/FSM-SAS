@@ -152,7 +152,7 @@ export const HELP_TIPS = [
       {
         label: "Scheduling & job config",
         link: "/dashboard/settings",
-        tip: "Windows, statuses, follow-up types, incentives.",
+        tip: "Windows, statuses, and follow-up types.",
       },
       {
         label: "Notifications & email",
@@ -161,18 +161,19 @@ export const HELP_TIPS = [
       },
     ],
     tips: [
-      "Most settings are for administrators. Technicians use Profile for personal details.",
+      "Most settings are for administrators.",
     ],
   },
   {
     title: "Profile & audit",
     icon: FaUser,
     items: [
-      {
-        label: "My profile",
-        link: "/dashboard/profile/myprofile",
-        tip: "Your name, contact, and technician profile.",
-      },
+      // Hidden from account dropdown until Profile is re-enabled
+      // {
+      //   label: "My profile",
+      //   link: "/dashboard/profile/myprofile",
+      //   tip: "Your name, contact, and technician profile.",
+      // },
       {
         label: "Audit logs",
         link: "/dashboard/audit-logs",
@@ -180,7 +181,7 @@ export const HELP_TIPS = [
       },
     ],
     tips: [
-      "Open Profile from the user menu (avatar, top right).",
+      "Review Audit Logs from Help or the user menu (avatar, top right).",
     ],
   },
   {
@@ -542,12 +543,13 @@ export const NAVIGATION_SECTIONS = [
         description: "Bell icon — job and system alerts",
         icon: FaBell,
       },
-      {
-        label: "Profile",
-        route: "/dashboard/profile/myprofile",
-        description: "Your user and technician profile",
-        icon: FaUser,
-      },
+      // Hidden from account dropdown until Profile is re-enabled
+      // {
+      //   label: "Profile",
+      //   route: "/dashboard/profile/myprofile",
+      //   description: "Your user and technician profile",
+      //   icon: FaUser,
+      // },
       {
         label: "Settings",
         route: "/dashboard/settings",
@@ -585,7 +587,7 @@ export const ROLE_GUIDE = [
     bullets: [
       "Sign in at /sign-in and land on the dashboard (/dashboard).",
       "Use global search and notifications from the top header.",
-      "Open Profile, Help, and Release Notes from the user menu or top nav.",
+      "Open Help and Release Notes from the user menu or top nav.",
       "View reports at /dashboard/reports subject to your permissions.",
     ],
   },
@@ -598,7 +600,8 @@ export const ROLE_GUIDE = [
       "Update job status, notes, and forms on the job detail page.",
       "View your schedule on the Technicians Scheduler (/scheduler).",
       "Manage follow-ups (/follow-ups) for your callbacks and tasks.",
-      "Edit personal details via Profile (/dashboard/profile/myprofile).",
+      // Hidden from account dropdown until Profile is re-enabled
+      // "Edit personal details via Profile (/dashboard/profile/myprofile).",
     ],
   },
   {

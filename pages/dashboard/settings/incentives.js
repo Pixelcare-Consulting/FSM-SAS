@@ -46,6 +46,9 @@ const PUSH_ALL_SKIPPED_PREVIEW = 8;
 /** Set true to restore the raw SAP incentive UDT panel and table. */
 const SHOW_SAP_UDT_PANEL = false;
 
+// Hidden from Settings until Job Incentives is re-enabled
+export const JOB_INCENTIVES_SETTINGS_ENABLED = false;
+
 function resolvePushPayload(worker, udtRows, laborYear, laborMonth, fsmLaborByTech) {
   const { row, hits, monthRows } = pickUdtRowForPush(worker, udtRows, laborYear, laborMonth);
   const odataKey = udtRowODataKey(row);
@@ -186,7 +189,13 @@ const JobIncentiveSettings = ({ embedded = false }) => {
   );
 
   useEffect(() => {
-    if (!embedded && router.isReady) {
+    if (!router.isReady) return;
+    // Hidden from Settings until Job Incentives is re-enabled
+    if (!JOB_INCENTIVES_SETTINGS_ENABLED) {
+      if (!embedded) router.replace("/dashboard/settings");
+      return;
+    }
+    if (!embedded) {
       router.replace("/dashboard/settings#incentives");
     }
   }, [embedded, router]);
@@ -287,17 +296,20 @@ const JobIncentiveSettings = ({ embedded = false }) => {
   }, [filterType, spYear, spMonth, spQuarter]);
 
   useEffect(() => {
+    if (!JOB_INCENTIVES_SETTINGS_ENABLED) return;
     loadWorkers();
   }, [loadWorkers]);
 
   /** Incentive UDT: load once when this panel mounts. */
   useEffect(() => {
+    if (!JOB_INCENTIVES_SETTINGS_ENABLED) return;
     if (udtAutoLoadedRef.current) return;
     udtAutoLoadedRef.current = true;
     void loadSapIncentives();
   }, [loadSapIncentives]);
 
   useEffect(() => {
+    if (!JOB_INCENTIVES_SETTINGS_ENABLED) return;
     void loadFsmHours();
   }, [loadFsmHours]);
 
@@ -1978,6 +1990,11 @@ const JobIncentiveSettings = ({ embedded = false }) => {
       </Modal>
     </>
   );
+
+  // Hidden from Settings until Job Incentives is re-enabled
+  if (!JOB_INCENTIVES_SETTINGS_ENABLED) {
+    return null;
+  }
 
   if (embedded) {
     return content;

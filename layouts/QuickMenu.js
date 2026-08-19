@@ -1325,13 +1325,14 @@ const QuickMenu = ({ children }) => {
               </div>
             </Dropdown.Item>
             <Dropdown.Divider />
-            <Dropdown.Item
+            {/* Hidden from account dropdown until Profile is re-enabled */}
+            {/* <Dropdown.Item
               as={Link}
               href="/dashboard/profile/myprofile"
               className={styles.qmDropdownItem}
             >
               <i className="fe fe-user me-2"></i> Profile
-            </Dropdown.Item>
+            </Dropdown.Item> */}
             <Dropdown.Item
               as={Link}
               href="/dashboard/settings"

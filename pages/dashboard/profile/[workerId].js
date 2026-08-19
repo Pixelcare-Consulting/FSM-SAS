@@ -7,6 +7,7 @@ import { EditContactTab } from "sub-components/dashboard/profile/EditContactTab"
 import { userService } from "../../../lib/supabase/database";
 import { getSupabaseClient } from "../../../lib/supabase/client";
 import toast from "react-hot-toast";
+import { ACCOUNT_PROFILE_ENABLED } from "./myprofile";
 
 const EditProfile = () => {
   const router = useRouter();
@@ -21,6 +22,17 @@ const EditProfile = () => {
   const [submittedData, setSubmittedData] = useState({});
 
   useEffect(() => {
+    if (!router.isReady) return;
+    // Hidden from account dropdown until Profile is re-enabled
+    if (!ACCOUNT_PROFILE_ENABLED) {
+      router.replace("/dashboard");
+    }
+  }, [router]);
+
+  useEffect(() => {
+    // Hidden from account dropdown until Profile is re-enabled
+    if (!ACCOUNT_PROFILE_ENABLED) return;
+
     const fetchWorkerData = async () => {
       console.log("Fetching data for Worker ID:", workerId);
       if (workerId) {
@@ -127,10 +139,12 @@ const EditProfile = () => {
   };
 
   useEffect(() => {
-    if (tab) {
-      setActiveTab(tab); // Set the active tab to the one passed in the query (e.g., 'contact')
+    if (tab && !loading) {
+      setTimeout(() => {
+        setActiveTab(tab);
+      }, 0);
     }
-  }, [tab]);
+  }, [tab, loading]);
 
   const handlePersonalFormSubmit = async (personalFormData) => {
     try {
@@ -302,6 +316,11 @@ const EditProfile = () => {
   };
 
   // Removed handleSkillsFormSubmit as skills tab is commented out
+
+  // Hidden from account dropdown until Profile is re-enabled
+  if (!ACCOUNT_PROFILE_ENABLED) {
+    return null;
+  }
 
   if (loading) {
     return (

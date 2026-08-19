@@ -24,7 +24,7 @@ import styles from "./settings.module.css";
 import { useLogo } from "../../contexts/LogoContext";
 import NotificationsSettingsPanel from "./settings/_components/NotificationsSettingsPanel";
 import EmailSettingsPanel from "./settings/_components/EmailSettingsPanel";
-import JobIncentiveSettings from "./settings/incentives";
+import JobIncentiveSettings, { JOB_INCENTIVES_SETTINGS_ENABLED } from "./settings/incentives";
 import SessionDevicesPanel from "./settings/_components/SessionDevicesPanel";
 import { useSettings } from "../../contexts/SettingsContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -1307,6 +1307,8 @@ const Settings = () => {
       case "email":
         return <EmailSettingsPanel />;
       case "incentives":
+        // Hidden from Settings until Job Incentives is re-enabled
+        if (!JOB_INCENTIVES_SETTINGS_ENABLED) return null;
         return <JobIncentiveSettings embedded />;
       case "session-devices":
         return <SessionDevicesPanel />;
@@ -1734,7 +1736,15 @@ const Settings = () => {
     const hash = (router.asPath.split("#")[1] || "").toLowerCase();
     if (hash === "notifications") setActiveTab("notifications");
     if (hash === "email" || hash === "email-settings") setActiveTab("email");
-    if (hash === "incentives" || hash === "job-incentives") setActiveTab("incentives");
+    if (hash === "incentives" || hash === "job-incentives") {
+      // Hidden from Settings until Job Incentives is re-enabled
+      if (JOB_INCENTIVES_SETTINGS_ENABLED) {
+        setActiveTab("incentives");
+      } else {
+        setActiveTab("company-info");
+        router.replace("/dashboard/settings", undefined, { shallow: true });
+      }
+    }
   }, [router.isReady, router.asPath]);
 
   // First, let's organize the settings into clear categories
@@ -1785,12 +1795,17 @@ const Settings = () => {
           icon: <FaBriefcase className="me-2" />,
           action: "jobstatuses",
         },
-        {
-          name: "Job Incentives",
-          description: "SAP job schedule sync, technician codes, and incentive reports",
-          icon: <FaTools className="me-2" />,
-          action: "incentives",
-        },
+        // Hidden from Settings until Job Incentives is re-enabled
+        ...(JOB_INCENTIVES_SETTINGS_ENABLED
+          ? [
+              {
+                name: "Job Incentives",
+                description: "SAP job schedule sync, technician codes, and incentive reports",
+                icon: <FaTools className="me-2" />,
+                action: "incentives",
+              },
+            ]
+          : []),
       ]
     },
     {

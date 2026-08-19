@@ -1,6 +1,6 @@
 {
   "name": "sas-sapb1-portal",
-  "version": "3.30.6",
+  "version": "3.31.0",
   "private": true,
   "packageManager": "pnpm@10.8.0",
   "scripts": {
@@ -20,6 +20,7 @@
     "test:sap-service-call": "node tests/sapServiceCallTransform.test.mjs",
     "test:sap-job-incentive": "node tests/sapJobIncentivePush.test.mjs",
     "test:sap-session-retry": "node tests/sapSessionRetry.test.mjs",
+    "test:sync-jobs-batch": "node tests/syncJobsBatch.test.mjs",
     "test:job-list-search": "node tests/jobListSearch.test.mjs",
     "test:location-active-filter": "node tests/filterActiveLocationOptions.test.mjs",
     "test:manual": "echo 'See tests/manual-test-checklist.md for manual testing steps'",
