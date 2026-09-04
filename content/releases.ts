@@ -10,6 +10,23 @@ export type ReleaseEntry = {
  */
 export const releases: ReleaseEntry[] = [
   {
+    version: '3.31.2',
+    date: '2026-08-21',
+    title: 'Assigned technicians show in Document Automation',
+    notes: [
+      'fix: Document Automation shows the assigned technicians on a job again, including when the primary technician has no SAP tech code',
+    ],
+  },
+  {
+    version: '3.31.1',
+    date: '2026-08-19',
+    title: 'Job times match in SAP',
+    notes: [
+      'fix: Job start and end times are sent to SAP in Singapore time, so a 12:00 PM job no longer shows as 4:00 AM',
+      'fix: Jobs scheduled late in the day no longer land on the wrong date in SAP',
+    ],
+  },
+  {
     version: '3.31.0',
     date: '2026-08-19',
     title: 'Sync Jobs can update jobs already in SAP',
