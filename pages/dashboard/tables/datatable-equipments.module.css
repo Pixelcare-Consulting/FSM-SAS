@@ -20,6 +20,7 @@
   white-space: normal !important;
   overflow: visible !important;
   text-overflow: unset !important;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: normal;
   line-height: 1.3;
 }

@@ -54,7 +54,7 @@ const EquipmentsTable = ({ equipments, onSelectedRowsChange, initialSelected }) 
     { name: 'Serial No', selector: row => row.SerialNo, sortable: true, wrap: true },
     { name: 'Brand', selector: row => row.Brand, sortable: true, wrap: true },
     { name: 'Notes', selector: row => row.Notes, sortable: true, wrap: true },
-    { name: 'Equipment Type', selector: row => row.EquipmentType, sortable: true, wrap: true },
+    { name: 'Equipment Type', selector: row => row.EquipmentType, sortable: true, wrap: true, minWidth: '170px' },
     { 
       name: 'Location', 
       selector: row => buildServiceLocationAddress(row), 
