@@ -47,14 +47,14 @@ const EquipmentsTable = ({ equipments, onSelectedRowsChange, initialSelected }) 
   };
 
   const columns = [
-    { name: 'Item Code', selector: row => row.ItemCode, sortable: true, wrap: true },
-    { name: 'Item Name', selector: row => row.ItemName, sortable: true, wrap: true },
-    { name: 'Item Group', selector: row => row.ItemGroup, sortable: true, wrap: true },
-    { name: 'Model Series', selector: row => row.ModelSeries, sortable: true, wrap: true },
-    { name: 'Serial No', selector: row => row.SerialNo, sortable: true, wrap: true },
-    { name: 'Brand', selector: row => row.Brand, sortable: true, wrap: true },
-    { name: 'Notes', selector: row => row.Notes, sortable: true, wrap: true },
-    { name: 'Equipment Type', selector: row => row.EquipmentType, sortable: true, wrap: true, minWidth: '170px' },
+    { name: 'Item Code', selector: row => row.ItemCode, sortable: true, wrap: true, minWidth: '140px' },
+    { name: 'Item Name', selector: row => row.ItemName, sortable: true, wrap: true, minWidth: '150px' },
+    { name: 'Item Group', selector: row => row.ItemGroup, sortable: true, wrap: true, minWidth: '150px' },
+    { name: 'Model Series', selector: row => row.ModelSeries, sortable: true, wrap: true, minWidth: '160px' },
+    { name: 'Serial No', selector: row => row.SerialNo, sortable: true, wrap: true, minWidth: '130px' },
+    { name: 'Brand', selector: row => row.Brand, sortable: true, wrap: true, minWidth: '110px' },
+    { name: 'Notes', selector: row => row.Notes, sortable: true, wrap: true, minWidth: '110px' },
+    { name: 'Equipment Type', selector: row => row.EquipmentType, sortable: true, wrap: true, minWidth: '190px' },
     { 
       name: 'Location', 
       selector: row => buildServiceLocationAddress(row), 
@@ -76,8 +76,8 @@ const EquipmentsTable = ({ equipments, onSelectedRowsChange, initialSelected }) 
       wrap: true,
       grow: 1
     },
-    { name: 'Warranty Start Date', selector: row => row.WarrantyStartDate, sortable: true, wrap: true },
-    { name: 'Warranty End Date', selector: row => row.WarrantyEndDate, sortable: true, wrap: true },
+    { name: 'Warranty Start Date', selector: row => row.WarrantyStartDate, sortable: true, wrap: true, minWidth: '210px' },
+    { name: 'Warranty End Date', selector: row => row.WarrantyEndDate, sortable: true, wrap: true, minWidth: '200px' },
   
   ];
 
