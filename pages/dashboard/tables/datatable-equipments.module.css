@@ -1,0 +1,25 @@
+.table :global(.rdt_TableHeadRow) {
+  height: auto;
+  align-items: stretch;
+}
+
+.table :global(.rdt_TableCol) {
+  height: auto;
+  align-items: flex-start;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.table :global(.rdt_TableCol_Sortable) {
+  height: auto;
+  overflow: visible;
+  align-items: flex-start;
+}
+
+.table :global(.rdt_TableCol_Sortable) > div {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: unset !important;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
