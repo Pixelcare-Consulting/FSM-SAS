@@ -20,6 +20,7 @@ const EQUIPMENT_FIELDS = [
   { key: 'ItemGroup', label: 'Item Group' },
 
   { key: 'Brand', label: 'Brand' },
+  { key: 'EquipmentType', label: 'Equipment Type' },
   { key: 'WarrantyStartDate', label: 'Warranty Start Date' },
   { key: 'WarrantyEndDate', label: 'Warranty End Date' },
 
@@ -252,12 +253,26 @@ const EquipmentsTab = ({ customerData, equipments: initialEquipments = null, onE
     <th onClick={() => handleSort('ItemCode')} style={headerStyle}>
       Item Code {sortField === 'ItemCode' && getSortIcon(sortDirection)}
     </th>
-
+    <th onClick={() => handleSort('ItemName')} style={headerStyle}>
+      Item Name {sortField === 'ItemName' && getSortIcon(sortDirection)}
+    </th>
+    <th onClick={() => handleSort('ItemGroup')} style={headerStyle}>
+      Item Group {sortField === 'ItemGroup' && getSortIcon(sortDirection)}
+    </th>
     <th onClick={() => handleSort('ModelSeries')} style={headerStyle}>
       Model Series {sortField === 'ModelSeries' && getSortIcon(sortDirection)}
     </th>
     <th onClick={() => handleSort('SerialNo')} style={headerStyle}>
       Serial No {sortField === 'SerialNo' && getSortIcon(sortDirection)}
+    </th>
+    <th onClick={() => handleSort('Brand')} style={headerStyle}>
+      Brand {sortField === 'Brand' && getSortIcon(sortDirection)}
+    </th>
+    <th onClick={() => handleSort('Notes')} style={headerStyle}>
+      Notes {sortField === 'Notes' && getSortIcon(sortDirection)}
+    </th>
+    <th onClick={() => handleSort('EquipmentType')} style={headerStyle}>
+      Equipment Type {sortField === 'EquipmentType' && getSortIcon(sortDirection)}
     </th>
     <th onClick={() => handleSort('EquipmentLocation')} style={headerStyle}>
       Location {sortField === 'EquipmentLocation' && getSortIcon(sortDirection)}
@@ -265,8 +280,11 @@ const EquipmentsTab = ({ customerData, equipments: initialEquipments = null, onE
     <th onClick={() => handleSort('ServiceLocationAddress')} style={headerStyle}>
       Service Location Address {sortField === 'ServiceLocationAddress' && getSortIcon(sortDirection)}
     </th>
-    <th onClick={() => handleSort('Notes')} style={headerStyle}>
-      Notes {sortField === 'Notes' && getSortIcon(sortDirection)}
+    <th onClick={() => handleSort('WarrantyStartDate')} style={headerStyle}>
+      Warranty Start Date {sortField === 'WarrantyStartDate' && getSortIcon(sortDirection)}
+    </th>
+    <th onClick={() => handleSort('WarrantyEndDate')} style={headerStyle}>
+      Warranty End Date {sortField === 'WarrantyEndDate' && getSortIcon(sortDirection)}
     </th>
     <th>Actions</th>
   </tr>
@@ -276,12 +294,17 @@ const EquipmentsTab = ({ customerData, equipments: initialEquipments = null, onE
   {sortedEquipments.map((item, index) => (
     <tr key={`${item.ItemCode}-${item.SerialNo}-${index}`} className="align-middle">
       <td>{item.ItemCode || 'N/A'}</td>
-   
+      <td>{item.ItemName || 'N/A'}</td>
+      <td>{item.ItemGroup || 'N/A'}</td>
       <td>{item.ModelSeries || 'N/A'}</td>
       <td>{item.SerialNo || 'N/A'}</td>
+      <td>{item.Brand || 'N/A'}</td>
+      <td>{item.Notes || 'N/A'}</td>
+      <td>{item.EquipmentType || 'N/A'}</td>
       <td>{item.EquipmentLocation || 'N/A'}</td>
       <td>{buildServiceLocationAddress(item)}</td>
-      <td>{item.Notes || 'N/A'}</td> 
+      <td>{item.WarrantyStartDate || 'N/A'}</td>
+      <td>{item.WarrantyEndDate || 'N/A'}</td> 
 
       <td>
         <Button variant="outline-primary" size="sm" onClick={() => handleViewDetails(item)}>
