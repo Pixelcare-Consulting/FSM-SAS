@@ -56,6 +56,8 @@ import {
   isDuplicateJobNumberError,
 } from "../../../lib/jobs/getNextJobNumber";
 import mapDbContactsToSelectOptions from "../../../lib/jobs/mapDbContactsToSelectOptions";
+import { resolveSapCustomerOption } from "../../../lib/jobs/serviceCallSearch";
+import ServiceCallSearchInput from "../../../components/jobs/ServiceCallSearchInput";
 
 const JOB_STATUS_DOT_FALLBACK = "currentColor";
 
@@ -383,6 +385,7 @@ const AddNewJobs = ({ validateJobForm }) => {
 
   const [serviceCalls, setServiceCalls] = useState([]);
   const [serviceCallsLoading, setServiceCallsLoading] = useState(false);
+  const [serviceCallPickPending, setServiceCallPickPending] = useState(null);
   const [salesOrders, setSalesOrders] = useState([]);
   const [selectedServiceCall, setSelectedServiceCall] = useState(null);
   const [selectedSalesOrder, setSelectedSalesOrder] = useState(null);
@@ -1372,6 +1375,9 @@ const AddNewJobs = ({ validateJobForm }) => {
     setSelectedCustomer(selectedOption);
     setSelectedServiceCall(null);
     setSelectedSalesOrder(null);
+    // Drop the previous customer's calls right away; they reload below.
+    setServiceCalls([]);
+    setSalesOrders([]);
 
     // Prefer list match; fall back to the option itself (URL prefill / synthesized).
     const selectedCustomer =
@@ -1512,6 +1518,9 @@ const AddNewJobs = ({ validateJobForm }) => {
       }));
       return;
     }
+
+    // Service calls load after contacts/locations/equipment; show loading meanwhile.
+    setServiceCallsLoading(true);
 
     // Load contacts from portal DB via server API (service role — matches customer detail embed; avoids client RLS on contacts).
     try {
@@ -1901,6 +1910,7 @@ const AddNewJobs = ({ validateJobForm }) => {
       );
     };
 
+    let loadedServiceCalls = [];
     setServiceCallsLoading(true);
     try {
       const serviceCallResponse = await fetch("/api/getServiceCall", {
@@ -1926,6 +1936,7 @@ const AddNewJobs = ({ validateJobForm }) => {
         );
 
         const localRows = await applyLocalServiceCallFallback();
+        loadedServiceCalls = localRows;
         setServiceCalls(localRows);
         setSalesOrders([]);
 
@@ -1975,6 +1986,7 @@ const AddNewJobs = ({ validateJobForm }) => {
           formattedServiceCalls = await applyLocalServiceCallFallback();
         }
 
+        loadedServiceCalls = formattedServiceCalls;
         setServiceCalls(formattedServiceCalls);
         setSalesOrders([]);
 
@@ -1987,6 +1999,7 @@ const AddNewJobs = ({ validateJobForm }) => {
     } catch (error) {
       console.error("Error fetching service calls:", error);
       const localRows = await applyLocalServiceCallFallback();
+      loadedServiceCalls = localRows;
       setServiceCalls(localRows);
       setSalesOrders([]);
       if (localRows.length > 0) {
@@ -2009,6 +2022,7 @@ const AddNewJobs = ({ validateJobForm }) => {
     } finally {
       setServiceCallsLoading(false);
     }
+    return loadedServiceCalls;
   };
 
   const handleJobContactTypeChange = (selectedOption) => {
@@ -2184,7 +2198,11 @@ const AddNewJobs = ({ validateJobForm }) => {
     }
   };
 
-  const handleSelectedServiceCallChange = async (selectedServiceCall) => {
+  const handleSelectedServiceCallChange = async (
+    selectedServiceCall,
+    customerOverride = null
+  ) => {
+    const customer = customerOverride || selectedCustomer;
     // // console.log(
     //   "handleSelectedServiceCallChange called with:",
     //   selectedServiceCall
@@ -2206,13 +2224,13 @@ const AddNewJobs = ({ validateJobForm }) => {
       return;
     }
 
-    if (selectedCustomer && selectedServiceCall) {
+    if (customer && selectedServiceCall) {
       try {
         // Show loading toast
         toast.loading("Fetching sales orders...", { id: "salesOrdersFetch" });
 
         // console.log("Fetching sales orders with:", {
-        //  cardCode: selectedCustomer.value,
+        //  cardCode: customer.value,
        //   serviceCallID: selectedServiceCall.value,
       //  });
 
@@ -2224,8 +2242,8 @@ const AddNewJobs = ({ validateJobForm }) => {
           body: JSON.stringify({
             cardCode:
               selectedServiceCall.fetchedForCardCode ||
-              selectedCustomer.cardCode ||
-              selectedCustomer.value,
+              customer.cardCode ||
+              customer.value,
             serviceCallID: selectedServiceCall.value,
           }),
         });
@@ -2331,6 +2349,57 @@ const AddNewJobs = ({ validateJobForm }) => {
         setSalesOrders([]);
       }
     }
+  };
+
+  const selectedCustomerCardCodes = [
+    selectedCustomer?.cardCode || selectedCustomer?.value,
+    selectedCustomer?.sap_card_code,
+  ].filter(Boolean);
+
+  // Picking a call from another customer switches to that customer first.
+  const handleServiceCallPick = async (option) => {
+    try {
+      await applyServiceCallPick(option);
+    } finally {
+      setServiceCallPickPending(null);
+    }
+  };
+
+  const applyServiceCallPick = async (option) => {
+    if (!option) {
+      setSelectedServiceCall(null);
+      setSelectedSalesOrder(null);
+      setSalesOrders([]);
+      return;
+    }
+
+    const optionCardCode = String(option.customerCode || "").trim().toUpperCase();
+    const isOtherCustomer =
+      optionCardCode &&
+      !selectedCustomerCardCodes.some(
+        (code) => String(code).trim().toUpperCase() === optionCardCode
+      );
+    if (!isOtherCustomer) {
+      setServiceCallPickPending({ option, message: "Loading sales orders..." });
+      await handleSelectedServiceCallChange(option);
+      return;
+    }
+
+    setServiceCallPickPending({
+      option,
+      message: "Updating customer and sales orders...",
+    });
+    const customerOption = resolveSapCustomerOption(customers, option);
+    const loadedServiceCalls = await handleCustomerChange(customerOption);
+    const serviceCallOption =
+      loadedServiceCalls.find((sc) => String(sc.value) === String(option.value)) ||
+      option;
+    setServiceCalls((prev) =>
+      prev.some((sc) => String(sc.value) === String(serviceCallOption.value))
+        ? prev
+        : [serviceCallOption, ...prev]
+    );
+    await handleSelectedServiceCallChange(serviceCallOption, customerOption);
   };
 
   // Helper function to convert status codes to readable text
@@ -4702,25 +4771,15 @@ const AddNewJobs = ({ validateJobForm }) => {
               </Form.Group> */}
               <Form.Group as={Col} md="3" controlId="serviceCall">
                 <Form.Label>Service Call</Form.Label>
-                <Select
-                  instanceId="service-call-select"
-                  options={serviceCalls}
+                <ServiceCallSearchInput
                   value={selectedServiceCall}
-                  onChange={handleSelectedServiceCallChange}
-                  placeholder={
-                    serviceCallsLoading
-                      ? "Loading service calls..."
-                      : "Select Service Call"
-                  }
-                  isDisabled={!selectedCustomer}
-                  isLoading={serviceCallsLoading}
-                  noOptionsMessage={() =>
-                    serviceCallsLoading
-                      ? "Loading service calls..."
-                      : selectedCustomer
-                        ? "No service calls found for this customer"
-                        : "Please select a customer first"
-                  }
+                  customerServiceCalls={serviceCalls}
+                  customerCardCodes={selectedCustomerCardCodes}
+                  searchAllCustomers={customerSource === "sap"}
+                  onSelect={handleServiceCallPick}
+                  disabled={!selectedCustomer && customerSource !== "sap"}
+                  loading={serviceCallsLoading}
+                  pending={serviceCallPickPending}
                 />
               </Form.Group>
 
