@@ -14,6 +14,7 @@ import {
   isOfficialSapCustomerCode,
   MAX_ERROR_ITEMS,
   normalizeCustomerCode,
+  sapHitFromBp,
 } from '../../../lib/integrations/sapDeltaSyncCore';
 import { previewSapDeltaSync } from '../../../lib/integrations/sapDeltaSyncPreview';
 import { computeAddressChangesForEntity } from '../../../lib/integrations/sapDeltaSyncAddressPreview';
@@ -98,6 +99,26 @@ function applyLocationSummaryToDelta(summary, masterlistSummary) {
   }
 }
 
+const MAX_SELECTED_HITS = 500;
+
+/** Hits chosen from the preview (`[{ cardCode, cardName, cardType }]`); null when not provided. */
+function parseSelectedHits(raw) {
+  if (!Array.isArray(raw)) return null;
+  const seen = new Set();
+  const hits = [];
+  for (const entry of raw.slice(0, MAX_SELECTED_HITS)) {
+    const hit = sapHitFromBp({
+      CardCode: entry?.cardCode,
+      CardName: entry?.cardName,
+      CardType: entry?.cardType,
+    });
+    if (!hit || seen.has(hit.cardCode)) continue;
+    seen.add(hit.cardCode);
+    hits.push(hit);
+  }
+  return hits;
+}
+
 function buildSyncResponseWarnings(summary) {
   const warnings = [];
   const removed = summary.locations?.removed || 0;
@@ -153,6 +174,7 @@ export default async function handler(req, res) {
         portalCustomerCode,
         start_date: range.start_date,
         end_date: range.end_date,
+        reviewedCardCodes: Array.isArray(body.reviewedCardCodes) ? body.reviewedCardCodes : [],
       });
 
       if (preview.errors.length > 0 && preview.counts.sapHits === 0) {
@@ -319,14 +341,23 @@ export default async function handler(req, res) {
       });
     }
 
-    const sapScan = await fetchSapBusinessPartnersInRange(sapCookies, range.start_date, range.end_date);
-    if (sapScan.error) {
-      summary.errors.push(`SAP delta query: ${sapScan.error}`);
+    // Preview confirm sends only the hits whose diff showed changes; cron (no `hits`) syncs the full scan.
+    const selectedHits = parseSelectedHits(body.hits);
+    let hitsToSync;
+    if (selectedHits) {
+      summary.selectedFromPreview = true;
+      hitsToSync = selectedHits;
+    } else {
+      const sapScan = await fetchSapBusinessPartnersInRange(sapCookies, range.start_date, range.end_date);
+      if (sapScan.error) {
+        summary.errors.push(`SAP delta query: ${sapScan.error}`);
+      }
+      summary.counts.sapPagesFetched = sapScan.pagesFetched || 0;
+      hitsToSync = sapScan.hits;
     }
-    summary.counts.sapPagesFetched = sapScan.pagesFetched || 0;
-    summary.counts.sapHits = sapScan.hits.length;
+    summary.counts.sapHits = hitsToSync.length;
 
-    const masterlistSummary = await syncSapHitsToMasterlist(sapScan.hits, {
+    const masterlistSummary = await syncSapHitsToMasterlist(hitsToSync, {
       supabase,
       sessionCookies: sapCookies,
     });

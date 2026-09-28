@@ -30,8 +30,27 @@ const DEFAULT_TOAST_STYLES = {
   },
 };
 
+const EMPTY_BATCH_STATE = {
+  reviewedCardCodes: [],
+  batchNumber: 1,
+  lastBatchResult: null,
+};
+
+/** Preview items the sync will actually write (new or changed); "unchanged" rows are left alone. */
+function hitsNeedingSync(preview) {
+  return (preview?.items || [])
+    .filter((item) => item.action === 'insert' || item.action === 'update')
+    .map(({ cardCode, cardName, cardType }) => ({ cardCode, cardName, cardType }));
+}
+
+function batchCardCodes(preview) {
+  return (preview?.items || []).map((item) => item.cardCode).filter(Boolean);
+}
+
 /**
  * Two-step SAP delta sync: preview modal → confirm → POST sync-delta.
+ * Delta mode (no SAP code) previews and syncs in batches of PREVIEW_ITEMS_CAP; after each batch
+ * the modal loads the next one until every SAP hit has been reviewed.
  *
  * @param {{
  *   toastStyles?: typeof DEFAULT_TOAST_STYLES,
@@ -51,6 +70,7 @@ export function useSapDeltaSync({ toastStyles = DEFAULT_TOAST_STYLES, onSyncSucc
     error: null,
     pendingCode: '',
     pendingPortalCode: '',
+    ...EMPTY_BATCH_STATE,
   });
 
   const closePreviewModal = useCallback(() => {
@@ -62,18 +82,19 @@ export function useSapDeltaSync({ toastStyles = DEFAULT_TOAST_STYLES, onSyncSucc
       error: null,
       pendingCode: '',
       pendingPortalCode: '',
+      ...EMPTY_BATCH_STATE,
     }));
   }, []);
 
   const runActualSync = useCallback(
-    async (normalizedCode, normalizedPortalCode = '') => {
+    async (normalizedCode, normalizedPortalCode = '', { hits = null, keepModalOpen = false, batchLabel = '' } = {}) => {
       setIsSyncingDelta(true);
       setSyncDeltaError('');
       setSyncDeltaSummary(null);
 
       const loadingMessage = normalizedCode
         ? `Syncing SAP delta for ${normalizedCode}...`
-        : 'Syncing SAP delta...';
+        : `Syncing SAP delta${batchLabel ? ` (${batchLabel})` : ''}...`;
       const loadingToastId = toast.loading(loadingMessage, {
         style: {
           ...toastStyles.BASE,
@@ -88,6 +109,7 @@ export function useSapDeltaSync({ toastStyles = DEFAULT_TOAST_STYLES, onSyncSucc
       const requestBody = {};
       if (normalizedCode) requestBody.customerCode = normalizedCode;
       if (normalizedPortalCode) requestBody.portalCustomerCode = normalizedPortalCode;
+      if (Array.isArray(hits)) requestBody.hits = hits;
 
       try {
         const response = await fetch('/api/customers/sync-delta', {
@@ -110,7 +132,7 @@ export function useSapDeltaSync({ toastStyles = DEFAULT_TOAST_STYLES, onSyncSucc
           ? payload.warnings.filter(Boolean)
           : [];
         setSyncDeltaSummary(summary);
-        closePreviewModal();
+        if (!keepModalOpen) closePreviewModal();
 
         if (onSyncSuccess) {
           await onSyncSuccess({ summary, normalizedCode, loadingToastId, warnings, payload });
@@ -150,10 +172,11 @@ export function useSapDeltaSync({ toastStyles = DEFAULT_TOAST_STYLES, onSyncSucc
     [closePreviewModal, onSyncSuccess, toastStyles]
   );
 
-  const fetchPreview = useCallback(async (normalizedCode, normalizedPortalCode = '') => {
+  const fetchPreview = useCallback(async (normalizedCode, normalizedPortalCode = '', reviewedCardCodes = []) => {
     const requestBody = { preview: true };
     if (normalizedCode) requestBody.customerCode = normalizedCode;
     if (normalizedPortalCode) requestBody.portalCustomerCode = normalizedPortalCode;
+    if (reviewedCardCodes.length) requestBody.reviewedCardCodes = reviewedCardCodes;
 
     const response = await fetch('/api/customers/sync-delta', {
       method: 'POST',
@@ -185,6 +208,7 @@ export function useSapDeltaSync({ toastStyles = DEFAULT_TOAST_STYLES, onSyncSucc
       error: null,
       pendingCode: normalizedCode,
       pendingPortalCode: normalizedPortalCode,
+      ...EMPTY_BATCH_STATE,
     });
 
     try {
@@ -205,12 +229,75 @@ export function useSapDeltaSync({ toastStyles = DEFAULT_TOAST_STYLES, onSyncSucc
     }
   }, [fetchPreview, isSyncingDelta, portalCustomerCode, syncCode]);
 
+  /** Mark the current batch reviewed and preview the next one. */
+  const loadNextBatch = useCallback(
+    async (lastBatchResult = null) => {
+      const { preview, reviewedCardCodes, batchNumber } = previewModal;
+      const nextReviewed = [...new Set([...reviewedCardCodes, ...batchCardCodes(preview)])];
+      setPreviewModal((prev) => ({
+        ...prev,
+        loading: true,
+        preview: null,
+        error: null,
+        reviewedCardCodes: nextReviewed,
+        batchNumber: batchNumber + 1,
+        lastBatchResult,
+      }));
+      try {
+        const nextPreview = await fetchPreview('', '', nextReviewed);
+        setPreviewModal((prev) => ({ ...prev, loading: false, preview: nextPreview, error: null }));
+      } catch (error) {
+        setPreviewModal((prev) => ({
+          ...prev,
+          loading: false,
+          preview: null,
+          error: error?.message || 'Failed to load the next SAP batch',
+        }));
+      }
+    },
+    [fetchPreview, previewModal]
+  );
+
+  const skipToNextBatch = useCallback(async () => {
+    await loadNextBatch({
+      batchNumber: previewModal.batchNumber,
+      skipped: true,
+      written: 0,
+      pendingChanges: hitsNeedingSync(previewModal.preview).length,
+    });
+  }, [loadNextBatch, previewModal.batchNumber, previewModal.preview]);
+
   const confirmSyncFromPreview = useCallback(async () => {
     const normalizedCode = previewModal.pendingCode || String(syncCode || '').trim().toUpperCase();
     const normalizedPortalCode =
       previewModal.pendingPortalCode || String(portalCustomerCode || '').trim().toUpperCase();
-    await runActualSync(normalizedCode, normalizedPortalCode);
-  }, [portalCustomerCode, previewModal.pendingCode, previewModal.pendingPortalCode, runActualSync, syncCode]);
+    const { preview, batchNumber } = previewModal;
+
+    if (preview?.mode !== 'sap_delta') {
+      await runActualSync(normalizedCode, normalizedPortalCode);
+      return;
+    }
+
+    // Delta: write only the rows whose diff showed changes, then move on to the next batch.
+    const hasMore = (preview.batch?.remainingAfter || 0) > 0;
+    const { summary } = await runActualSync('', '', {
+      hits: hitsNeedingSync(preview),
+      keepModalOpen: hasMore,
+      batchLabel: hasMore || batchNumber > 1 ? `batch ${batchNumber}` : '',
+    });
+    if (hasMore) {
+      await loadNextBatch({
+        batchNumber,
+        skipped: false,
+        written:
+          (summary?.counts?.masterlistCustomersInserted || 0) +
+          (summary?.counts?.masterlistCustomersUpdated || 0) +
+          (summary?.counts?.masterlistLeadsInserted || 0) +
+          (summary?.counts?.masterlistLeadsUpdated || 0),
+        errors: Array.isArray(summary?.errors) ? summary.errors.length : 0,
+      });
+    }
+  }, [loadNextBatch, portalCustomerCode, previewModal, runActualSync, syncCode]);
 
   return {
     syncCode,
@@ -224,5 +311,6 @@ export function useSapDeltaSync({ toastStyles = DEFAULT_TOAST_STYLES, onSyncSucc
     openSyncPreview,
     closePreviewModal,
     confirmSyncFromPreview,
+    skipToNextBatch,
   };
 }

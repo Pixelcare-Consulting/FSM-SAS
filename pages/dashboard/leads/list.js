@@ -376,6 +376,7 @@ const ViewLeads = () => {
     openSyncPreview,
     closePreviewModal,
     confirmSyncFromPreview,
+    skipToNextBatch,
   } = useSapDeltaSync({
     toastStyles: TOAST_STYLES,
     onSyncSuccess: async ({ summary, normalizedCode, loadingToastId }) => {
@@ -445,6 +446,9 @@ const ViewLeads = () => {
         loading={previewModal.loading}
         error={previewModal.error}
         onConfirm={confirmSyncFromPreview}
+        onSkipBatch={skipToNextBatch}
+        batchNumber={previewModal.batchNumber}
+        lastBatchResult={previewModal.lastBatchResult}
         confirming={isSyncingDelta}
         entityFilter="lead"
       />
