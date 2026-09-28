@@ -49,6 +49,14 @@ function filterPreviewItems(items, entityFilter) {
   return (items || []).filter((item) => item.entityType === entityFilter);
 }
 
+/** Address rows the sync will actually change — unchanged rows and job-linked keeps are hidden. */
+function effectiveAddressChanges(addressChanges) {
+  if (!Array.isArray(addressChanges)) return [];
+  return addressChanges.filter(
+    (row) => row.action === 'add' || row.action === 'update' || (row.action === 'remove' && !row.willSkip)
+  );
+}
+
 function formatModeLabel(preview) {
   if (!preview) return '';
   if (preview.mode === 'promotion') return 'CP → SAP promotion';
@@ -60,12 +68,6 @@ function formatModeLabel(preview) {
 
 function itemRowKey(item) {
   return `${item.action}-${item.cardCode}-${item.portalCode || ''}`;
-}
-
-function countAddressChanges(addressChanges) {
-  if (!Array.isArray(addressChanges)) return { total: 0, changed: 0 };
-  const changed = addressChanges.filter((row) => row.action !== 'unchanged').length;
-  return { total: addressChanges.length, changed };
 }
 
 function collectFsmAddressImpact(items) {
@@ -100,14 +102,38 @@ function AddressValue({ value, muted = false }) {
   );
 }
 
+function FieldChangesPanel({ fieldChanges }) {
+  if (!Array.isArray(fieldChanges) || fieldChanges.length === 0) return null;
+  return (
+    <div className="bg-light border-top">
+      <table className="table table-sm table-borderless mb-0 small">
+        <thead>
+          <tr className="text-muted text-uppercase" style={{ fontSize: '0.68rem', letterSpacing: '0.04em' }}>
+            <th style={{ width: '32%' }}>Field</th>
+            <th style={{ width: '34%' }}>Before (portal)</th>
+            <th style={{ width: '34%' }}>After (SAP sync)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {fieldChanges.map((row) => (
+            <tr key={row.field}>
+              <td className="align-top fw-medium">{row.label}</td>
+              <td className="align-top">
+                <AddressValue value={row.before} />
+              </td>
+              <td className="align-top">
+                <AddressValue value={row.after} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function AddressChangesPanel({ addressChanges }) {
-  if (!Array.isArray(addressChanges) || addressChanges.length === 0) {
-    return (
-      <div className="small text-muted py-2 px-3 bg-light border-top">
-        No SAP addresses returned for this business partner.
-      </div>
-    );
-  }
+  if (!Array.isArray(addressChanges) || addressChanges.length === 0) return null;
 
   return (
     <div className="bg-light border-top">
@@ -149,18 +175,20 @@ function AddressChangesPanel({ addressChanges }) {
 
 function PreviewItemRow({ item }) {
   const [expanded, setExpanded] = useState(false);
-  const { total, changed } = countAddressChanges(item.addressChanges);
-  const hasAddresses = total > 0;
+  const addressChanges = effectiveAddressChanges(item.addressChanges);
+  const addressChangeCount = addressChanges.length;
+  const fieldChangeCount = Array.isArray(item.fieldChanges) ? item.fieldChanges.length : 0;
+  const canExpand = addressChangeCount > 0 || fieldChangeCount > 0;
   const toggleExpanded = () => {
-    if (hasAddresses) setExpanded((prev) => !prev);
+    if (canExpand) setExpanded((prev) => !prev);
   };
 
   return (
     <>
       <tr
-        className={hasAddresses ? 'cursor-pointer' : undefined}
+        className={canExpand ? 'cursor-pointer' : undefined}
         onClick={toggleExpanded}
-        style={hasAddresses ? { cursor: 'pointer' } : undefined}
+        style={canExpand ? { cursor: 'pointer' } : undefined}
       >
         <td>{actionBadge(item.action)}</td>
         <td>
@@ -173,24 +201,32 @@ function PreviewItemRow({ item }) {
         </td>
         <td className="text-muted small text-uppercase">{item.entityType}</td>
         <td className="small text-muted text-nowrap">
-          {hasAddresses ? (
+          {canExpand ? (
             <span>
               <span className="me-1" aria-hidden>
                 {expanded ? '▾' : '▸'}
               </span>
-              {changed > 0
-                ? `${changed} address change${changed === 1 ? '' : 's'}`
-                : `${total} address${total === 1 ? '' : 'es'}`}
+              {[
+                fieldChangeCount > 0
+                  ? `${fieldChangeCount} field change${fieldChangeCount === 1 ? '' : 's'}`
+                  : null,
+                addressChangeCount > 0
+                  ? `${addressChangeCount} address change${addressChangeCount === 1 ? '' : 's'}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </span>
           ) : (
             '—'
           )}
         </td>
       </tr>
-      {expanded && hasAddresses ? (
+      {expanded && canExpand ? (
         <tr>
           <td colSpan={5} className="p-0">
-            <AddressChangesPanel addressChanges={item.addressChanges} />
+            <FieldChangesPanel fieldChanges={item.fieldChanges} />
+            <AddressChangesPanel addressChanges={addressChanges} />
           </td>
         </tr>
       ) : null}
@@ -210,7 +246,10 @@ export default function SapDeltaSyncPreviewModal({
   title = 'Sync from SAP — Preview',
 }) {
   const counts = preview?.counts || {};
-  const visibleItems = filterPreviewItems(preview?.items, entityFilter);
+  const entityItems = filterPreviewItems(preview?.items, entityFilter);
+  // SAP bumps UpdateDate on any BP edit; items that already match the portal are not listed.
+  const visibleItems = entityItems.filter((item) => item.action !== 'unchanged');
+  const unchangedCount = entityItems.length - visibleItems.length;
   const totalVisible = visibleItems.length;
   const totalPlannedChanges =
     (counts.promotions || 0) +
@@ -295,12 +334,14 @@ export default function SapDeltaSyncPreviewModal({
             <PortalConfirmRow
               label="Customers"
               value={`${counts.customersToInsert || 0} create · ${counts.customersToUpdate || 0} update${
-                counts.promotions ? ` · ${counts.promotions} promote` : ''
-              }`}
+                counts.customersUnchanged ? ` · ${counts.customersUnchanged} already up to date` : ''
+              }${counts.promotions ? ` · ${counts.promotions} promote` : ''}`}
             />
             <PortalConfirmRow
               label="Leads"
-              value={`${counts.leadsToInsert || 0} create · ${counts.leadsToUpdate || 0} update`}
+              value={`${counts.leadsToInsert || 0} create · ${counts.leadsToUpdate || 0} update${
+                counts.leadsUnchanged ? ` · ${counts.leadsUnchanged} already up to date` : ''
+              }`}
             />
           </PortalConfirmPanel>
 
@@ -339,7 +380,9 @@ export default function SapDeltaSyncPreviewModal({
             <Alert variant="info" className="mb-0">
               {totalPlannedChanges > 0
                 ? `No ${entityFilter === 'lead' ? 'lead' : 'customer'} rows match this view, but ${totalPlannedChanges} other masterlist change${totalPlannedChanges === 1 ? '' : 's'} will still run.`
-                : 'No masterlist changes planned. Adjust the SAP code or date range and try again.'}
+                : unchangedCount > 0
+                  ? `Already up to date — SAP data matches the portal for ${unchangedCount} ${entityFilter === 'lead' ? 'lead' : 'record'}${unchangedCount === 1 ? '' : 's'}. Nothing to sync.`
+                  : 'No masterlist changes planned. Adjust the SAP code or date range and try again.'}
             </Alert>
           ) : (
             <>
@@ -352,11 +395,14 @@ export default function SapDeltaSyncPreviewModal({
                     Showing first {totalVisible} of {counts.sapHits} SAP hits
                   </span>
                 ) : (
-                  <span className="small text-muted">{totalVisible} item{totalVisible === 1 ? '' : 's'}</span>
+                  <span className="small text-muted">
+                    {totalVisible} item{totalVisible === 1 ? '' : 's'}
+                    {unchangedCount > 0 ? ` · ${unchangedCount} already up to date (hidden)` : ''}
+                  </span>
                 )}
               </div>
               <p className="small text-muted mb-2">
-                Click a row to expand address Before / After details.
+                Click a row to expand field and address Before / After details.
               </p>
               <div className="table-responsive border rounded" style={{ maxHeight: 420 }}>
                 <table className="table table-sm table-hover mb-0 align-middle">
