@@ -56,7 +56,10 @@ import {
   isDuplicateJobNumberError,
 } from "../../../lib/jobs/getNextJobNumber";
 import mapDbContactsToSelectOptions from "../../../lib/jobs/mapDbContactsToSelectOptions";
-import { resolveSapCustomerOption } from "../../../lib/jobs/serviceCallSearch";
+import {
+  buildCustomJobRefOption,
+  resolveSapCustomerOption,
+} from "../../../lib/jobs/serviceCallSearch";
 import ServiceCallSearchInput from "../../../components/jobs/ServiceCallSearchInput";
 
 const JOB_STATUS_DOT_FALLBACK = "currentColor";
@@ -389,6 +392,8 @@ const AddNewJobs = ({ validateJobForm }) => {
   const [salesOrders, setSalesOrders] = useState([]);
   const [selectedServiceCall, setSelectedServiceCall] = useState(null);
   const [selectedSalesOrder, setSelectedSalesOrder] = useState(null);
+  /** Type Service Call / Sales Order numbers by hand instead of picking from SAP. */
+  const [useCustomServiceCall, setUseCustomServiceCall] = useState(false);
 
   const [customers, setCustomers] = useState([]);
   const [contacts, setContacts] = useState([]);
@@ -2356,6 +2361,17 @@ const AddNewJobs = ({ validateJobForm }) => {
     selectedCustomer?.sap_card_code,
   ].filter(Boolean);
 
+  // Unticking Custom drops hand-typed numbers; SAP picks made before ticking stay.
+  const handleCustomServiceCallToggle = (checked) => {
+    setUseCustomServiceCall(checked);
+    if (checked) return;
+    if (selectedServiceCall?.isCustom) {
+      setSelectedServiceCall(null);
+      setSalesOrders([]);
+    }
+    if (selectedSalesOrder?.isCustom) setSelectedSalesOrder(null);
+  };
+
   // Picking a call from another customer switches to that customer first.
   const handleServiceCallPick = async (option) => {
     try {
@@ -3475,6 +3491,7 @@ const AddNewJobs = ({ validateJobForm }) => {
             customer_id: customerId,
             location_id: locationId,
             service_call_id: serviceCallId,
+            use_custom_service_call: useCustomServiceCall,
             contact_id: contactId || null,
             job_number: currentJobNo,
             title: jobTitle,
@@ -4770,40 +4787,72 @@ const AddNewJobs = ({ validateJobForm }) => {
                 </Form.Select>
               </Form.Group> */}
               <Form.Group as={Col} md="3" controlId="serviceCall">
-                <Form.Label>Service Call</Form.Label>
-                <ServiceCallSearchInput
-                  value={selectedServiceCall}
-                  customerServiceCalls={serviceCalls}
-                  customerCardCodes={selectedCustomerCardCodes}
-                  searchAllCustomers={customerSource === "sap"}
-                  onSelect={handleServiceCallPick}
-                  disabled={!selectedCustomer && customerSource !== "sap"}
-                  loading={serviceCallsLoading}
-                  pending={serviceCallPickPending}
-                />
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <Form.Label className="mb-0">Service Call</Form.Label>
+                  <Form.Check
+                    type="checkbox"
+                    id="custom-service-call-check"
+                    label="Custom"
+                    className="mb-0 small"
+                    checked={useCustomServiceCall}
+                    onChange={(e) => handleCustomServiceCallToggle(e.target.checked)}
+                  />
+                </div>
+                {useCustomServiceCall ? (
+                  <Form.Control
+                    type="text"
+                    placeholder="Enter Service Call"
+                    value={selectedServiceCall?.text ?? selectedServiceCall?.value ?? ""}
+                    onChange={(e) =>
+                      setSelectedServiceCall(buildCustomJobRefOption(e.target.value))
+                    }
+                  />
+                ) : (
+                  <ServiceCallSearchInput
+                    value={selectedServiceCall}
+                    customerServiceCalls={serviceCalls}
+                    customerCardCodes={selectedCustomerCardCodes}
+                    searchAllCustomers={customerSource === "sap"}
+                    onSelect={handleServiceCallPick}
+                    disabled={!selectedCustomer && customerSource !== "sap"}
+                    loading={serviceCallsLoading}
+                    pending={serviceCallPickPending}
+                  />
+                )}
               </Form.Group>
 
               <Form.Group as={Col} md="3" controlId="salesOrder">
                 <Form.Label>Sales Order</Form.Label>
-                <Select
-                  instanceId="sales-order-select"
-                  options={salesOrders}
-                  value={selectedSalesOrder}
-                  onChange={(selectedOption) =>
-                    setSelectedSalesOrder(selectedOption)
-                  }
-                  placeholder={
-                    selectedServiceCall
-                      ? "Select Sales Order"
-                      : "Select Service Call first"
-                  }
-                  isDisabled={!selectedServiceCall || salesOrders.length === 0}
-                  noOptionsMessage={() =>
-                    selectedServiceCall
-                      ? "No sales orders found for this service call"
-                      : "Please select a service call first"
-                  }
-                />
+                {useCustomServiceCall ? (
+                  <Form.Control
+                    type="text"
+                    placeholder="Enter Sales Order"
+                    value={selectedSalesOrder?.text ?? selectedSalesOrder?.value ?? ""}
+                    onChange={(e) =>
+                      setSelectedSalesOrder(buildCustomJobRefOption(e.target.value))
+                    }
+                  />
+                ) : (
+                  <Select
+                    instanceId="sales-order-select"
+                    options={salesOrders}
+                    value={selectedSalesOrder}
+                    onChange={(selectedOption) =>
+                      setSelectedSalesOrder(selectedOption)
+                    }
+                    placeholder={
+                      selectedServiceCall
+                        ? "Select Sales Order"
+                        : "Select Service Call first"
+                    }
+                    isDisabled={!selectedServiceCall || salesOrders.length === 0}
+                    noOptionsMessage={() =>
+                      selectedServiceCall
+                        ? "No sales orders found for this service call"
+                        : "Please select a service call first"
+                    }
+                  />
+                )}
               </Form.Group>
 
               <Form.Group as={Col} md="3" controlId="jobContactType">

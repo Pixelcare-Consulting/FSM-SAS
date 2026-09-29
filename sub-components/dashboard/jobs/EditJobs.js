@@ -58,6 +58,7 @@ import {
   mergeWorkerSelectOptions,
 } from "../../../lib/jobs/assignableWorkerSelect";
 import { upsertJobCustomerLocation } from "../../../lib/jobs/upsertJobCustomerLocation";
+import { buildCustomJobRefOption } from "../../../lib/jobs/serviceCallSearch";
 import { resolveContactIdFromSelection } from "../../../lib/jobs/upsertJobContactFromSelection";
 import {
   buildJobFormLocationPatch,
@@ -674,6 +675,10 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
   const [serviceCallClearedByUser, setServiceCallClearedByUser] = useState(false);
   /** Explicit Sales Order clear — honor null sales_order_id on save even if job still has a stale FK. */
   const [salesOrderClearedByUser, setSalesOrderClearedByUser] = useState(false);
+  /** Type Service Call / Sales Order numbers by hand instead of picking from SAP. */
+  const [useCustomServiceCall, setUseCustomServiceCall] = useState(
+    () => initialJobData?.useCustomServiceCall === true
+  );
   const [selectedJobContactType, setSelectedJobContactType] = useState(null);
 
   // Data lists
@@ -2871,6 +2876,36 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
     await fetchSalesOrdersForServiceCall(selectedServiceCall);
   };
 
+  const handleCustomServiceCallText = (text) => {
+    const option = buildCustomJobRefOption(text);
+    setSelectedServiceCall(option);
+    setServiceCallClearedByUser(!option);
+    setHasChanges(true);
+  };
+
+  const handleCustomSalesOrderText = (text) => {
+    const option = buildCustomJobRefOption(text);
+    setSelectedSalesOrder(option);
+    setSalesOrderClearedByUser(!option);
+    setHasChanges(true);
+  };
+
+  // Unticking Custom drops hand-typed numbers; SAP picks made before ticking stay.
+  const handleCustomServiceCallToggle = (checked) => {
+    setUseCustomServiceCall(checked);
+    if (checked) return;
+    if (selectedServiceCall?.isCustom) {
+      setSelectedServiceCall(null);
+      setServiceCallClearedByUser(true);
+      setSalesOrders([]);
+      setSalesOrdersHydrated(false);
+    }
+    if (selectedSalesOrder?.isCustom) {
+      setSelectedSalesOrder(null);
+      setSalesOrderClearedByUser(true);
+    }
+  };
+
   // Add a new function to handle equipment selection changes
   const handleEquipmentSelection = useCallback(({ currentSelections, added, removed }) => {
     // Update the selected equipments state
@@ -3675,6 +3710,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
         location_id: locationId,
         service_call_id: serviceCallId,
         sales_order_id: salesOrderId,
+        use_custom_service_call: useCustomServiceCall,
         contact_id: contactId || null,
       };
 
@@ -4887,64 +4923,95 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
               </Form.Group> */}
 
               <Form.Group as={Col} md="3" controlId="serviceCall">
-                <Form.Label>Service Call</Form.Label>
-                <Select
-                  instanceId="service-call-select"
-                  options={serviceCalls}
-                  value={selectedServiceCall}
-                  onChange={handleSelectedServiceCallChange}
-                  placeholder={selectedCustomer ? "Select Service Call" : "Select Customer first"}
-                  isDisabled={isFormDisabled || !selectedCustomer}
-                  isClearable
-                  isLoading={Boolean(selectedCustomer) && !customerRelatedDataLoaded}
-                  noOptionsMessage={() =>
-                    selectedCustomer
-                      ? customerRelatedDataLoaded
-                        ? "No service calls found for this customer"
-                        : "Loading service calls..."
-                      : "Please select a customer first"
-                  }
-                />
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <Form.Label className="mb-0">Service Call</Form.Label>
+                  <Form.Check
+                    type="checkbox"
+                    id="custom-service-call-check"
+                    label="Custom"
+                    className="mb-0 small"
+                    checked={useCustomServiceCall}
+                    disabled={isFormDisabled}
+                    onChange={(e) => handleCustomServiceCallToggle(e.target.checked)}
+                  />
+                </div>
+                {useCustomServiceCall ? (
+                  <Form.Control
+                    type="text"
+                    placeholder="Enter Service Call"
+                    value={selectedServiceCall?.text ?? selectedServiceCall?.value ?? ""}
+                    onChange={(e) => handleCustomServiceCallText(e.target.value)}
+                    disabled={isFormDisabled}
+                  />
+                ) : (
+                  <Select
+                    instanceId="service-call-select"
+                    options={serviceCalls}
+                    value={selectedServiceCall}
+                    onChange={handleSelectedServiceCallChange}
+                    placeholder={selectedCustomer ? "Select Service Call" : "Select Customer first"}
+                    isDisabled={isFormDisabled || !selectedCustomer}
+                    isClearable
+                    isLoading={Boolean(selectedCustomer) && !customerRelatedDataLoaded}
+                    noOptionsMessage={() =>
+                      selectedCustomer
+                        ? customerRelatedDataLoaded
+                          ? "No service calls found for this customer"
+                          : "Loading service calls..."
+                        : "Please select a customer first"
+                    }
+                  />
+                )}
               </Form.Group>
 
               <Form.Group as={Col} md="3" controlId="salesOrder">
                 <Form.Label>Sales Order</Form.Label>
-                <Select
-                  instanceId="sales-order-select"
-                  options={salesOrders}
-                  value={selectedSalesOrder}
-                  onChange={(selectedOption) => {
-                    setSelectedSalesOrder(selectedOption);
-                    setSalesOrderClearedByUser(!selectedOption);
-                    setHasChanges(true);
-                  }}
-                  onMenuOpen={() => {
-                    if (
-                      selectedServiceCall &&
-                      !salesOrdersHydrated &&
-                      !salesOrdersLoading
-                    ) {
-                      void fetchSalesOrdersForServiceCall(selectedServiceCall, {
-                        quiet: true,
-                      });
+                {useCustomServiceCall ? (
+                  <Form.Control
+                    type="text"
+                    placeholder="Enter Sales Order"
+                    value={selectedSalesOrder?.text ?? selectedSalesOrder?.value ?? ""}
+                    onChange={(e) => handleCustomSalesOrderText(e.target.value)}
+                    disabled={isFormDisabled}
+                  />
+                ) : (
+                  <Select
+                    instanceId="sales-order-select"
+                    options={salesOrders}
+                    value={selectedSalesOrder}
+                    onChange={(selectedOption) => {
+                      setSelectedSalesOrder(selectedOption);
+                      setSalesOrderClearedByUser(!selectedOption);
+                      setHasChanges(true);
+                    }}
+                    onMenuOpen={() => {
+                      if (
+                        selectedServiceCall &&
+                        !salesOrdersHydrated &&
+                        !salesOrdersLoading
+                      ) {
+                        void fetchSalesOrdersForServiceCall(selectedServiceCall, {
+                          quiet: true,
+                        });
+                      }
+                    }}
+                    placeholder={
+                      selectedServiceCall
+                        ? "Select Sales Order"
+                        : "Select Service Call first"
                     }
-                  }}
-                  placeholder={
-                    selectedServiceCall
-                      ? "Select Sales Order"
-                      : "Select Service Call first"
-                  }
-                  isDisabled={isFormDisabled || !selectedServiceCall}
-                  isClearable
-                  isLoading={salesOrdersLoading}
-                  noOptionsMessage={() =>
-                    selectedServiceCall
-                      ? salesOrdersLoading
-                        ? "Loading sales orders..."
-                        : "No sales orders found for this service call"
-                      : "Please select a service call first"
-                  }
-                />
+                    isDisabled={isFormDisabled || !selectedServiceCall}
+                    isClearable
+                    isLoading={salesOrdersLoading}
+                    noOptionsMessage={() =>
+                      selectedServiceCall
+                        ? salesOrdersLoading
+                          ? "Loading sales orders..."
+                          : "No sales orders found for this service call"
+                        : "Please select a service call first"
+                    }
+                  />
+                )}
               </Form.Group>
 
               <Form.Group as={Col} md="3" controlId="jobContactType">
