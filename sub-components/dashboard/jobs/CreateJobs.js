@@ -2361,15 +2361,12 @@ const AddNewJobs = ({ validateJobForm }) => {
     selectedCustomer?.sap_card_code,
   ].filter(Boolean);
 
-  // Unticking Custom drops hand-typed numbers; SAP picks made before ticking stay.
+  // Toggling Custom either way starts Service Call / Sales Order from blank.
   const handleCustomServiceCallToggle = (checked) => {
     setUseCustomServiceCall(checked);
-    if (checked) return;
-    if (selectedServiceCall?.isCustom) {
-      setSelectedServiceCall(null);
-      setSalesOrders([]);
-    }
-    if (selectedSalesOrder?.isCustom) setSelectedSalesOrder(null);
+    setSelectedServiceCall(null);
+    setSelectedSalesOrder(null);
+    setSalesOrders([]);
   };
 
   // Picking a call from another customer switches to that customer first.

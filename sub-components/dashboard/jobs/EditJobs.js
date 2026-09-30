@@ -2890,20 +2890,16 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
     setHasChanges(true);
   };
 
-  // Unticking Custom drops hand-typed numbers; SAP picks made before ticking stay.
+  // Toggling Custom either way starts Service Call / Sales Order from blank.
   const handleCustomServiceCallToggle = (checked) => {
     setUseCustomServiceCall(checked);
-    if (checked) return;
-    if (selectedServiceCall?.isCustom) {
-      setSelectedServiceCall(null);
-      setServiceCallClearedByUser(true);
-      setSalesOrders([]);
-      setSalesOrdersHydrated(false);
-    }
-    if (selectedSalesOrder?.isCustom) {
-      setSelectedSalesOrder(null);
-      setSalesOrderClearedByUser(true);
-    }
+    setSelectedServiceCall(null);
+    setServiceCallClearedByUser(true);
+    setSelectedSalesOrder(null);
+    setSalesOrderClearedByUser(true);
+    setSalesOrders([]);
+    setSalesOrdersHydrated(false);
+    setHasChanges(true);
   };
 
   // Add a new function to handle equipment selection changes
