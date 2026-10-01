@@ -398,8 +398,14 @@ const ViewJobs = () => {
     totalUnsyncedAll: 0,
     hasDateFilter: false,
     concurrency: 4,
+    syncedJobsList: [],
+    syncedJobsListTruncated: false,
     error: null,
   });
+  // Already-in-SAP jobs the user ticked to re-push. Unticked jobs are left
+  // alone so manual SAP edits (e.g. via Document Automation) aren't overwritten.
+  const [selectedSyncedJobIds, setSelectedSyncedJobIds] = useState([]);
+  const [syncedJobSearch, setSyncedJobSearch] = useState('');
   const [syncDateFilter, setSyncDateFilter] = useState({
     preset: 'all',
     dateFrom: null,
@@ -1890,8 +1896,13 @@ const ViewJobs = () => {
         totalUnsyncedAll: data.totalUnsyncedAll ?? data.unsyncedJobs ?? 0,
         hasDateFilter: data.hasDateFilter ?? Boolean(dateFrom || dateTo),
         concurrency: data.concurrency ?? 4,
+        syncedJobsList: Array.isArray(data.syncedJobsList) ? data.syncedJobsList : [],
+        syncedJobsListTruncated: data.syncedJobsListTruncated === true,
         error: null,
       }));
+      // Drop ticks for jobs no longer in the range.
+      const listedIds = new Set((data.syncedJobsList || []).map((j) => j.id));
+      setSelectedSyncedJobIds((prev) => prev.filter((id) => listedIds.has(id)));
     } catch (e) {
       setSyncSapConfirm((prev) => ({
         ...prev,
@@ -1903,6 +1914,8 @@ const ViewJobs = () => {
 
   const openSyncSapConfirm = () => {
     setSyncIncludeSynced(false);
+    setSelectedSyncedJobIds([]);
+    setSyncedJobSearch('');
     setSyncDateFilter({ preset: 'all', dateFrom: null, dateTo: null });
     setSyncSapConfirm({
       show: true,
@@ -1914,6 +1927,8 @@ const ViewJobs = () => {
       totalUnsyncedAll: 0,
       hasDateFilter: false,
       concurrency: 4,
+      syncedJobsList: [],
+      syncedJobsListTruncated: false,
       error: null,
     });
     fetchSyncPreview(null, null, false);
@@ -1955,7 +1970,10 @@ const ViewJobs = () => {
       const syncPayload = { stream: true, syncAll: true };
       if (syncDateFilter.dateFrom) syncPayload.dateFrom = syncDateFilter.dateFrom;
       if (syncDateFilter.dateTo) syncPayload.dateTo = syncDateFilter.dateTo;
-      if (syncIncludeSynced) syncPayload.includeSynced = true;
+      if (syncIncludeSynced) {
+        syncPayload.includeSynced = true;
+        syncPayload.syncedJobIds = selectedSyncedJobIds;
+      }
 
       const res = await fetch('/api/jobs/sync-hourly', {
         method: 'POST',
@@ -2107,9 +2125,34 @@ const ViewJobs = () => {
 
   const canStartJobSync =
     syncSapConfirm.unsyncedJobs > 0 ||
-    (syncIncludeSynced && (syncSapConfirm.syncedInRange ?? 0) > 0);
+    (syncIncludeSynced && selectedSyncedJobIds.length > 0);
   const jobSyncStartCount =
-    syncSapConfirm.unsyncedJobs + (syncIncludeSynced ? syncSapConfirm.syncedInRange ?? 0 : 0);
+    syncSapConfirm.unsyncedJobs + (syncIncludeSynced ? selectedSyncedJobIds.length : 0);
+
+  const filteredSyncedJobs = useMemo(() => {
+    const list = syncSapConfirm.syncedJobsList || [];
+    const q = syncedJobSearch.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((j) =>
+      [j.job_number, j.customer_name, j.title].some((v) => String(v ?? '').toLowerCase().includes(q))
+    );
+  }, [syncSapConfirm.syncedJobsList, syncedJobSearch]);
+
+  const toggleSyncedJob = (id, checked) => {
+    setSelectedSyncedJobIds((prev) =>
+      checked ? (prev.includes(id) ? prev : [...prev, id]) : prev.filter((x) => x !== id)
+    );
+  };
+
+  const allFilteredSyncedSelected =
+    filteredSyncedJobs.length > 0 && filteredSyncedJobs.every((j) => selectedSyncedJobIds.includes(j.id));
+
+  const toggleAllFilteredSyncedJobs = (checked) => {
+    const ids = filteredSyncedJobs.map((j) => j.id);
+    setSelectedSyncedJobIds((prev) =>
+      checked ? [...new Set([...prev, ...ids])] : prev.filter((id) => !ids.includes(id))
+    );
+  };
 
   /**
    * Link AIFM jobs (no customer_id + [CUSTOMER:…] in description) to customers.
@@ -2670,6 +2713,71 @@ const ViewJobs = () => {
                       option.
                     </div>
                   )}
+                  {syncIncludeSynced && (
+                    <div className="mt-2">
+                      <div className="text-muted small mb-2">
+                        Tick only the jobs to re-send. Unticked jobs keep their current SAP data, including manual
+                        edits made in SAP.
+                      </div>
+                      <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+                        <Form.Control
+                          size="sm"
+                          placeholder="Search job no., customer, title"
+                          value={syncedJobSearch}
+                          onChange={(e) => setSyncedJobSearch(e.target.value)}
+                          style={{ maxWidth: 280 }}
+                        />
+                        <Form.Check
+                          type="checkbox"
+                          id="sync-select-all-synced"
+                          label={syncedJobSearch.trim() ? 'Select all shown' : 'Select all'}
+                          checked={allFilteredSyncedSelected}
+                          disabled={filteredSyncedJobs.length === 0}
+                          onChange={(e) => toggleAllFilteredSyncedJobs(e.target.checked)}
+                        />
+                        <span className="small text-muted ms-auto">
+                          {selectedSyncedJobIds.length.toLocaleString()} selected
+                        </span>
+                      </div>
+                      <div className="border rounded bg-white" style={{ maxHeight: 260, overflowY: 'auto' }}>
+                        {filteredSyncedJobs.length === 0 ? (
+                          <div className="text-muted small p-3 text-center">No jobs already in SAP match.</div>
+                        ) : (
+                          filteredSyncedJobs.map((j) => (
+                            <label
+                              key={j.id}
+                              htmlFor={`sync-synced-${j.id}`}
+                              className="d-flex align-items-start gap-2 px-3 py-2 border-bottom small mb-0"
+                              style={{ cursor: 'pointer' }}
+                            >
+                              <Form.Check
+                                type="checkbox"
+                                id={`sync-synced-${j.id}`}
+                                checked={selectedSyncedJobIds.includes(j.id)}
+                                onChange={(e) => toggleSyncedJob(j.id, e.target.checked)}
+                              />
+                              <div className="flex-grow-1 text-truncate">
+                                <span className="fw-semibold">{j.job_number || '—'}</span>
+                                {j.customer_name ? <span className="text-muted"> · {j.customer_name}</span> : null}
+                                {j.title ? <div className="text-muted text-truncate">{j.title}</div> : null}
+                              </div>
+                              <span className="text-muted text-nowrap" style={{ fontSize: 11 }}>
+                                {j.last_synced_at
+                                  ? `Synced ${new Date(j.last_synced_at).toLocaleDateString()}`
+                                  : ''}
+                              </span>
+                            </label>
+                          ))
+                        )}
+                      </div>
+                      {syncSapConfirm.syncedJobsListTruncated && (
+                        <div className="text-muted small mt-1">
+                          Showing the newest {(syncSapConfirm.syncedJobsList || []).length.toLocaleString()} of{' '}
+                          {(syncSapConfirm.syncedInRange ?? 0).toLocaleString()}. Narrow the date range to see more.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2695,7 +2803,9 @@ const ViewJobs = () => {
                       {(syncSapConfirm.syncedInRange ?? syncSapConfirm.syncedJobs).toLocaleString()}
                     </div>
                     <div className="text-muted" style={{ fontSize: 11 }}>
-                      {syncIncludeSynced ? 'will be updated' : 'skipped (in range)'}
+                      {syncIncludeSynced
+                        ? `${selectedSyncedJobIds.length.toLocaleString()} selected to update`
+                        : 'skipped (in range)'}
                     </div>
                   </div>
                 </Col>
@@ -2723,18 +2833,19 @@ const ViewJobs = () => {
                   </p>
                 )}
 
-              {syncSapConfirm.unsyncedJobs === 0 &&
-              !(syncIncludeSynced && (syncSapConfirm.syncedInRange ?? 0) > 0) ? (
+              {syncSapConfirm.unsyncedJobs === 0 && !(syncIncludeSynced && selectedSyncedJobIds.length > 0) ? (
                 <Alert variant="success" className="mb-0 small">
-                  No unsynced jobs match this filter. Try a wider date range or &quot;All unsynced&quot;, or
-                  choose a date range and update jobs already in SAP.
+                  {syncIncludeSynced
+                    ? 'No unsynced jobs match this filter. Tick the jobs already in SAP you want to update.'
+                    : <>No unsynced jobs match this filter. Try a wider date range or &quot;All unsynced&quot;, or
+                  choose a date range and update jobs already in SAP.</>}
                 </Alert>
               ) : (
                 <Alert variant="warning" className="mb-0 small">
                   <strong>Important:</strong> Keep this tab open during sync. Do not refresh — it can cause data
                   loss or duplicate SAP records. Uses {syncSapConfirm.concurrency} parallel workers.
                   {syncIncludeSynced
-                    ? ' Jobs already in SAP will be updated, not created twice.'
+                    ? ' Selected jobs already in SAP will be overwritten with portal data, not created twice.'
                     : ''}
                 </Alert>
               )}
