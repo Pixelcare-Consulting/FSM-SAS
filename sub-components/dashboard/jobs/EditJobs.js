@@ -3999,14 +3999,6 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
         }
       }
 
-      // Phase 2: Sync job to SAP after technician_jobs and job_schedule.job_tech are saved
-      fetch('/api/jobs/sync-to-sap', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId: jobIdProp }),
-        credentials: 'include'
-      }).then(r => { if (!r.ok) console.warn('SAP job sync failed'); }).catch(e => console.warn('SAP job sync error', e));
-
       setProgress(80);
 
       // 4. Update job_schedule table with duration (same as CreateJobs.js)
@@ -4084,6 +4076,15 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
           toast.error(`Failed to save schedule details: ${scheduleInsertError.message}`);
         }
       }
+
+      // Phase 2: Sync job to SAP after technician_jobs and job_schedule are saved,
+      // so U_API_JOB_SCHEDULE gets the new tech and the edited dates/times/address
+      fetch('/api/jobs/sync-to-sap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId: jobIdProp }),
+        credentials: 'include'
+      }).then(r => { if (!r.ok) console.warn('SAP job sync failed'); }).catch(e => console.warn('SAP job sync error', e));
 
       setProgress(85);
 
