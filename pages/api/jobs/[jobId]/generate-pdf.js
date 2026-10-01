@@ -185,12 +185,15 @@ async function enrichJobImagesForPdf(jobImages, adminClient, jobId) {
     return [];
   }
 
-  const imageCandidates = jobImages.filter(
+  // Videos can't be embedded in the jobsheet, and downloading them for base64 conversion is wasteful
+  const nonVideoMedia = jobImages.filter((img) => img.media_type !== 'video');
+
+  const imageCandidates = nonVideoMedia.filter(
     (img) => img.media_type !== 'pdf' && img.image_url
   );
 
   if (imageCandidates.length === 0) {
-    return jobImages;
+    return nonVideoMedia;
   }
 
   const conversions = await Promise.all(
@@ -214,7 +217,7 @@ async function enrichJobImagesForPdf(jobImages, adminClient, jobId) {
     }
   });
 
-  return jobImages
+  return nonVideoMedia
     .map((img) => {
       if (img.media_type === 'pdf' || !img.image_url) {
         return img;

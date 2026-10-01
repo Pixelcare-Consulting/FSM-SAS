@@ -620,6 +620,42 @@ const geocodeAddress = async (address) => {
 };
 
 const JOB_MEDIA_BUCKET = 'job_service_media';
+// Videos are limited to browser-playable containers so they render in the job media modal.
+const JOB_MEDIA_VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg'];
+const JOB_MEDIA_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+// Matches the Supabase project's default global upload limit (50MB).
+const JOB_MEDIA_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
+const JOB_MEDIA_ACCEPT = `image/*,${JOB_MEDIA_VIDEO_MIME_TYPES.join(',')}`;
+
+const getJobMediaType = (file) => {
+  if (file?.type?.startsWith('image/')) return 'image';
+  if (JOB_MEDIA_VIDEO_MIME_TYPES.includes(file?.type)) return 'video';
+  return null;
+};
+
+// The portal is Chrome-only, so a video Chrome can't decode here (e.g. HEVC without hardware
+// support) won't play for viewers either. Unsupported video codecs either error or load audio-only
+// with a 0 width, so require a decoded frame with real dimensions.
+const VIDEO_DECODE_CHECK_TIMEOUT_MS = 10000;
+const canBrowserDecodeVideo = (file) =>
+  new Promise((resolve) => {
+    const video = document.createElement('video');
+    const objectUrl = URL.createObjectURL(file);
+    let timeoutId;
+    const finish = (result) => {
+      clearTimeout(timeoutId);
+      video.removeAttribute('src');
+      video.load();
+      URL.revokeObjectURL(objectUrl);
+      resolve(result);
+    };
+    timeoutId = setTimeout(() => finish(false), VIDEO_DECODE_CHECK_TIMEOUT_MS);
+    video.muted = true;
+    video.preload = 'auto';
+    video.onloadeddata = () => finish(video.videoWidth > 0 && video.videoHeight > 0);
+    video.onerror = () => finish(false);
+    video.src = objectUrl;
+  });
 
 const JobDetails = () => {
   // Move all useState declarations to the top
@@ -776,29 +812,52 @@ const JobDetails = () => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const appendPendingFiles = useCallback((fileList) => {
+  const appendPendingFiles = useCallback(async (fileList) => {
     const files = Array.from(fileList || []);
     if (!files.length) return;
 
-    // Filter to only allow image files
-    const imageFiles = files.filter(file => {
-      return file.type?.startsWith("image/");
-    });
-
-    // Show error for non-image files
-    const rejectedFiles = files.filter(file => !file.type?.startsWith("image/"));
-    if (rejectedFiles.length > 0) {
-      toast.error(`${rejectedFiles.length} file(s) rejected. Only image files (JPEG, PNG, etc.) are allowed.`);
+    const unsupportedFiles = files.filter((file) => !getJobMediaType(file));
+    if (unsupportedFiles.length > 0) {
+      toast.error(`${unsupportedFiles.length} file(s) rejected. Only images and MP4, WebM, MOV or OGG videos are allowed.`);
     }
 
-    if (!imageFiles.length) return;
+    const oversizedFiles = files.filter((file) => {
+      const mediaType = getJobMediaType(file);
+      if (mediaType === 'image') return file.size > JOB_MEDIA_IMAGE_MAX_BYTES;
+      if (mediaType === 'video') return file.size > JOB_MEDIA_VIDEO_MAX_BYTES;
+      return false;
+    });
+    if (oversizedFiles.length > 0) {
+      toast.error(`${oversizedFiles.length} file(s) rejected. Images must be under 10MB and videos under 50MB.`);
+    }
 
-    const newEntries = imageFiles.map((file, index) => {
+    const candidateFiles = files.filter(
+      (file) => getJobMediaType(file) && !oversizedFiles.includes(file)
+    );
+
+    const decodeResults = await Promise.all(
+      candidateFiles.map((file) =>
+        getJobMediaType(file) === 'video' ? canBrowserDecodeVideo(file) : true
+      )
+    );
+    const undecodableVideos = candidateFiles.filter((_, index) => !decodeResults[index]);
+    if (undecodableVideos.length > 0) {
+      toast.error(
+        `${undecodableVideos.map((file) => file.name).join(', ')} can't be played in the browser. Please export as MP4 (H.264) and try again.`
+      );
+    }
+
+    const mediaFiles = candidateFiles.filter((_, index) => decodeResults[index]);
+
+    if (!mediaFiles.length) return;
+
+    const newEntries = mediaFiles.map((file, index) => {
       const key = `${file.name}-${file.size}-${file.lastModified}-${Date.now()}-${index}`;
       return {
         key,
         file,
-        preview: URL.createObjectURL(file), // All files are images now, so always create preview
+        mediaType: getJobMediaType(file),
+        preview: URL.createObjectURL(file),
       };
     });
 
@@ -2914,18 +2973,22 @@ const JobDetails = () => {
       const uploadedRecords = [];
 
       for (const item of pendingImageFiles) {
-        const { file, key } = item;
+        const { file, key, mediaType } = item;
         const description = imageDescriptions[key]?.trim() || "";
         const safeFileName = file.name.replace(/\s+/g, "_");
         const storagePath = `${jobId}/${Date.now()}-${safeFileName}`;
-        const uploadResult = await uploadFile(JOB_MEDIA_BUCKET, storagePath, file, { upsert: false });
-        // Omit media_type so the database uses its DEFAULT (avoids job_media_media_type_check / enum casing issues)
+        const uploadResult = await uploadFile(JOB_MEDIA_BUCKET, storagePath, file, {
+          upsert: false,
+          contentType: file.type,
+        });
+        // Images omit media_type so the database uses its DEFAULT ('image'); videos must be tagged explicitly
         const insertData = {
           job_id: jobId,
           image_url: uploadResult.url,
           filename: file.name,
           description: description || null,
           created_by: createdByUserId,
+          ...(mediaType === 'video' ? { media_type: 'video' } : {}),
         };
 
         let { data: mediaRecord, error: mediaError } = await supabase
@@ -3001,8 +3064,12 @@ const JobDetails = () => {
         customerCode: job?.customerCode,
       });
     } catch (error) {
-      console.error("Error uploading job images:", error);
-      toast.error("Failed to upload images");
+      console.error("Error uploading job media:", error);
+      toast.error(
+        error?.statusCode === '413' || /exceeded the maximum allowed size/i.test(error?.message || '')
+          ? "Upload failed: file exceeds the storage size limit"
+          : "Failed to upload media"
+      );
     } finally {
       setIsUploadingImages(false);
     }
@@ -3031,8 +3098,8 @@ const JobDetails = () => {
   const handleDeleteImage = async (image) => {
     // Show confirmation dialog
     const result = await Swal.fire({
-      title: 'Delete Image?',
-      text: `Are you sure you want to delete "${image.name || image.description || 'this image'}"?`,
+      title: image.media_type === 'video' ? 'Delete Video?' : 'Delete Image?',
+      text: `Are you sure you want to delete "${image.name || image.description || (image.media_type === 'video' ? 'this video' : 'this image')}"?`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#dc3545',
@@ -3093,7 +3160,7 @@ const JobDetails = () => {
         },
       });
 
-      toast.success('Image deleted successfully');
+      toast.success(image.media_type === 'video' ? 'Video deleted successfully' : 'Image deleted successfully');
       invalidateJobDetailSatellites(queryClient, jobUuid || job?.id || jobId, {
         customerCode: job?.customerCode,
       });
@@ -3117,7 +3184,7 @@ const JobDetails = () => {
           {isLoadingImages ? (
             <div className={styles.emptyState}>Loading images...</div>
           ) : jobImages.length === 0 ? (
-            <div className={styles.emptyState}>No images uploaded yet</div>
+            <div className={styles.emptyState}>No images or videos uploaded yet</div>
           ) : (
           <>
             <div className={styles.imageGrid}>
@@ -3332,8 +3399,8 @@ const JobDetails = () => {
               <div className={styles.dropzoneIconWrapper}>
                 <Images size={28} />
               </div>
-              <p className="fw-semibold mb-1">Drag & drop images here</p>
-              <p className="text-muted mb-2">JPEG, PNG, GIF, WebP up to 10MB each</p>
+              <p className="fw-semibold mb-1">Drag & drop images or videos here</p>
+              <p className="text-muted mb-2">Images (JPEG, PNG, GIF, WebP) up to 10MB · Videos (MP4, WebM, MOV) up to 50MB</p>
               <div className="d-flex align-items-center gap-2 flex-wrap justify-content-center">
                 <Button variant="outline-primary" size="sm" onClick={handleBrowseMoreFiles} disabled={isUploadingImages}>
                   Browse Files
@@ -3348,10 +3415,17 @@ const JobDetails = () => {
 
             {pendingImageFiles.length > 0 ? (
               <div className={styles.pendingList}>
-                {pendingImageFiles.map(({ key, file, preview }) => (
+                {pendingImageFiles.map(({ key, file, preview, mediaType }) => (
                   <div key={key} className={styles.uploadPreviewRow}>
                     <div className={styles.uploadPreviewThumb}>
-                      {preview ? (
+                      {preview && mediaType === 'video' ? (
+                        <>
+                          <video src={preview} muted preload="metadata" />
+                          <span className={styles.uploadPreviewVideoIndicator} aria-label="Video">
+                            <PlayCircle size={22} />
+                          </span>
+                        </>
+                      ) : preview ? (
                         <img src={preview} alt={file.name} />
                       ) : (
                         <FileText size={32} />
@@ -6665,14 +6739,14 @@ const JobDetails = () => {
                         onClick={handleTriggerImageUpload}
                         disabled={isUploadingImages}
                       >
-                        {isUploadingImages ? 'Uploading...' : 'Upload Images'}
+                        {isUploadingImages ? 'Uploading...' : 'Upload Images / Videos'}
                       </Button>
                     </div>
                   </div>
                 <input
                   type="file"
                   multiple
-                  accept="image/*"
+                  accept={JOB_MEDIA_ACCEPT}
                   ref={fileInputRef}
                   style={{ display: 'none' }}
                   onChange={handleJobImageUpload}

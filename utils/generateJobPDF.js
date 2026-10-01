@@ -716,7 +716,9 @@ export async function generateJobPDF(jobData, options = {}) {
   yPos += 10;
   
   // Check if there are images to include
-  const jobImages = jobData.job_images || jobData.images || [];
+  const jobImages = (jobData.job_images || jobData.images || []).filter(
+    (img) => img.media_type !== 'video'
+  );
   if (jobImages.length > 0) {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
