@@ -134,6 +134,8 @@ export const ServiceLocationTab = ({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [locationToDelete, setLocationToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  /** Set when DELETE returns 409 (linked jobs) — drives the "cannot delete" modal. */
+  const [deleteBlocked, setDeleteBlocked] = useState(null);
   const [localAddresses, setLocalAddresses] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -668,15 +670,13 @@ export const ServiceLocationTab = ({
       const result = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (res.status === 409) {
-          const jobCount = result.jobCount;
-          const jobLabel =
-            typeof jobCount === 'number'
-              ? `${jobCount} active job${jobCount === 1 ? '' : 's'}`
-              : 'active jobs';
-          throw new Error(
-            result.error ||
-              `Cannot delete: ${jobLabel} reference this service location`,
-          );
+          setDeleteBlocked({
+            location: locationToDelete,
+            jobCount: typeof result.jobCount === 'number' ? result.jobCount : null,
+          });
+          setShowDeleteModal(false);
+          setLocationToDelete(null);
+          return;
         }
         throw new Error(result.error || `Delete failed (${res.status})`);
       }
@@ -838,11 +838,56 @@ export const ServiceLocationTab = ({
     </PortalModal>
   );
 
+  const blockedJobCount = deleteBlocked?.jobCount;
+  const deleteBlockedModal = (
+    <PortalModal
+      show={Boolean(deleteBlocked)}
+      onHide={() => setDeleteBlocked(null)}
+      title="Cannot Delete Service Location"
+      size="md"
+      footer={
+        <Button
+          variant="primary"
+          className="rounded-3"
+          onClick={() => setDeleteBlocked(null)}
+        >
+          OK
+        </Button>
+      }
+    >
+      {deleteBlocked ? (
+        <>
+          <Alert variant="warning" className="mb-3">
+            This service location can&apos;t be deleted because it has data linked to it
+            {typeof blockedJobCount === 'number'
+              ? ` (${blockedJobCount} active job${blockedJobCount === 1 ? '' : 's'})`
+              : ' (active jobs)'}
+            . Reassign or remove the linked jobs first.
+          </Alert>
+          <PortalConfirmPanel>
+            <PortalConfirmRow
+              label="Address"
+              value={deleteBlocked.location?.AddressName || '—'}
+            />
+            <PortalConfirmRow
+              label="Type"
+              value={formatAddressTypeLabel(deleteBlocked.location?.AddressType)}
+            />
+            <PortalConfirmRow label="Location">
+              {formatAddress(deleteBlocked.location) || '—'}
+            </PortalConfirmRow>
+          </PortalConfirmPanel>
+        </>
+      ) : null}
+    </PortalModal>
+  );
+
   if (validAddresses.length === 0) {
     return (
       <>
         <div className="p-4">No service locations found.</div>
         {deleteConfirmModal}
+        {deleteBlockedModal}
       </>
     );
   }
@@ -1093,6 +1138,7 @@ export const ServiceLocationTab = ({
         />
 
         {deleteConfirmModal}
+        {deleteBlockedModal}
 
         <Modal show={showModal} onHide={handleCloseModal} size="xl">
           <Modal.Header closeButton>
