@@ -146,6 +146,41 @@ const realInvLine = buildServiceCallActivityLine({
 assert.equal(realInvLine.U_JobStatus, 'NI');
 assert.equal(realInvLine.U_InvNumber, undefined, 'Document Automation owns U_InvNumber');
 
+const invoicedLine = buildServiceCallActivityLine({
+  job: realInvoiceJob,
+  poNumber: null,
+  technicianJobs: [],
+  lineNum: 16,
+  jobStatus: { jobStatusId: '-1', jobStatusLabel: 'Job Done' },
+  priorLine: { LineNum: 16, ActivityCode: 33547, U_JobStatus: 'I' },
+});
+assert.equal(invoicedLine.U_JobStatus, undefined, 'does not revert a Document Automation invoiced line to NI');
+
+const notInvoicedPrior = buildServiceCallActivityLine({
+  job: realInvoiceJob,
+  poNumber: null,
+  technicianJobs: [],
+  lineNum: 16,
+  jobStatus: { jobStatusId: '-1', jobStatusLabel: 'Job Done' },
+  priorLine: { LineNum: 16, ActivityCode: 33547, U_JobStatus: 'NI' },
+});
+assert.equal(notInvoicedPrior.U_JobStatus, 'NI');
+
+for (const extra of [
+  { sap_cm_number: null, sap_job_income: 0 },
+  { sap_cm_number: 'CM-7', sap_job_income: '150.5' },
+]) {
+  const line = buildServiceCallActivityLine({
+    job: { ...realInvoiceJob, ...extra },
+    poNumber: null,
+    technicianJobs: [],
+    lineNum: 16,
+    jobStatus: { jobStatusId: '-1', jobStatusLabel: 'Job Done' },
+  });
+  assert.equal(line.U_CMNumber, undefined, 'SAP owns U_CMNumber; portal never sends it');
+  assert.equal(line.U_JobIncome, undefined, 'SAP owns U_JobIncome; portal default 0 must not overwrite it');
+}
+
 assert.equal(formatAuditValueEmptyObject({}), '—', 'empty audit objects display as em dash, not {}');
 assert.equal(
   formatAuditValueEmptyObject({ httpStatus: 204, storedLine: stored, techPersisted: true }),
