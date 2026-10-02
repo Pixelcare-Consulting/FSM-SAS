@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 
-import { buildScl5IncentiveUpdateSql } from '../lib/services/sapJobIncentivePush.js';
+import {
+  buildApiJobScheduleCodeEndpoint,
+  buildScl5IncentiveUpdateSql,
+} from '../lib/services/sapJobIncentivePush.js';
+
+// Numeric Code must be unquoted; SAP rejects ('1293354') with "Error in query syntax".
+assert.equal(buildApiJobScheduleCodeEndpoint('U_API_JOB_SCHEDULE', 1293354), 'U_API_JOB_SCHEDULE(1293354)');
+assert.equal(buildApiJobScheduleCodeEndpoint('U_API_JOB_SCHEDULE', '1293354'), 'U_API_JOB_SCHEDULE(1293354)');
+assert.equal(buildApiJobScheduleCodeEndpoint('U_API_JOB_SCHEDULE', "A'1"), "U_API_JOB_SCHEDULE('A''1')");
 
 const sql = buildScl5IncentiveUpdateSql({
   clgId: '33547',
