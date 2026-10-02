@@ -251,6 +251,11 @@ export default async function handler(req, res) {
           summary.mode = 'promotion';
           summary.promotionResolved = promotionResolved;
           summary.promotion = promotion;
+          if (promotion.equipments?.error) {
+            summary.errors.push(`Equipment sync ${promotion.to}: ${promotion.equipments.error}`);
+          } else if (promotion.equipments) {
+            summary.equipments = promotion.equipments;
+          }
           summary.counts.sapHits = 1;
           summary.counts.masterlistCustomersUpdated = 1;
           summary.elapsedMs = Date.now() - startedAt;

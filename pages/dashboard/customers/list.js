@@ -1749,13 +1749,17 @@ const ViewCustomers = () => {
         throw new Error(detail);
       }
 
+      const eq = summary.equipments;
+      const equipmentDetail = eq
+        ? ` · equipment: ${eq.inserted || 0} added, ${eq.updated || 0} updated, ${eq.removed || 0} removed`
+        : '';
       const successDetail = wasPromotion
         ? summary.promotion?.from && summary.promotion?.to
           ? `Promoted ${summary.promotion.from} → ${summary.promotion.to}`
           : 'Portal customer promoted to official SAP C code'
         : normalizedCode
-          ? `SAP sync: ${normalizedCode} (${customersWritten} masterlist row${customersWritten === 1 ? '' : 's'})`
-          : 'SAP delta sync completed';
+          ? `SAP sync: ${normalizedCode} (${customersWritten} masterlist row${customersWritten === 1 ? '' : 's'})${equipmentDetail}`
+          : `SAP delta sync completed${equipmentDetail}`;
       toast.success(
         wasPromotion ? (
           <div>
