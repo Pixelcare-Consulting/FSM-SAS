@@ -8,6 +8,7 @@ import {
   hasRealSapInvoiceNumber,
   mergeServiceCallActivityCollection,
   pickStoredServiceCallActivityLine,
+  withoutCustomJobRefs,
 } from '../lib/utils/sapServiceCallTransform.js';
 
 /** Mirrors `formatAuditValue` in utils/auditLogDisplay.js for empty objects. */
@@ -187,5 +188,16 @@ assert.equal(
   'populated',
   'GET-after-PATCH response is shown in audit instead of an empty object'
 );
+
+{
+  const refs = { service_call: { call_number: 'SC-TYPED' }, sales_order: { document_number: 'SO-TYPED' } };
+  const custom = withoutCustomJobRefs({ id: 'j1', use_custom_service_call: true, ...refs });
+  assert.equal(custom.service_call, null, 'custom service call is never sent to SAP');
+  assert.equal(custom.sales_order, null, 'custom sales order is never sent to SAP');
+  assert.equal(custom.id, 'j1');
+
+  const picked = { id: 'j2', use_custom_service_call: false, ...refs };
+  assert.equal(withoutCustomJobRefs(picked), picked, 'SAP-picked refs are kept');
+}
 
 console.log('sapServiceCallTransform tests passed');
