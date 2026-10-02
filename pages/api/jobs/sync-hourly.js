@@ -6,7 +6,8 @@
  *   { stream: true, syncAll: true } — SSE live sync (all unsynced jobs)
  *   { includeSynced: true, dateFrom, dateTo } — also update jobs already in SAP (date range required)
  *   { includeSynced: true, syncedJobIds: [...] } — only update the listed already-in-SAP jobs
- *   { preview: true, includeSynced: true } — also returns syncedJobsList for the picker
+ *   { excludedUnsyncedJobIds: [...] } — skip these unsynced jobs (unticked in the picker)
+ *   { preview: true } — also returns unsyncedJobsList (+ syncedJobsList when includeSynced) for the pickers
  *   { limit?: number } — capped batch (cron/scripts)
  *
  * Requires SAP session cookies (except preview-only without SAP — preview doesn't need SAP).
@@ -20,6 +21,7 @@ import {
   getIncludeSyncedDateRangeError,
   getSyncPreview,
   parseDateFilter,
+  parseExcludedUnsyncedJobIds,
   parseIncludeSynced,
   parseSyncedJobIds,
   resolveBatchLimit,
@@ -97,6 +99,7 @@ export default async function handler(req, res) {
   const dateFilter = parseDateFilter(body);
   const includeSynced = parseIncludeSynced(body);
   const syncedJobIds = includeSynced ? parseSyncedJobIds(body) : null;
+  const excludedUnsyncedJobIds = parseExcludedUnsyncedJobIds(body);
   const includeSyncedDateError = getIncludeSyncedDateRangeError(includeSynced, dateFilter);
   if (includeSyncedDateError) {
     return res.status(400).json({
@@ -117,7 +120,8 @@ export default async function handler(req, res) {
       const preview = await getSyncPreview(supabase, dateFilter, {
         includeSynced,
         syncedJobIds,
-        withSyncedList: true,
+        excludedUnsyncedJobIds,
+        withPickerLists: true,
       });
       return res.status(200).json(preview);
     } catch (e) {
@@ -139,10 +143,14 @@ export default async function handler(req, res) {
 
   if (!useStream) {
     try {
-      const preview = await getSyncPreview(supabase, dateFilter, { includeSynced, syncedJobIds });
+      const preview = await getSyncPreview(supabase, dateFilter, { includeSynced, syncedJobIds, excludedUnsyncedJobIds });
       const totalUnsynced = preview.unsyncedJobs;
       const limit = resolveBatchLimit(body, preview.toProcess);
-      const jobs = await fetchJobsForSapSync(supabase, limit, dateFilter, { includeSynced, syncedJobIds });
+      const jobs = await fetchJobsForSapSync(supabase, limit, dateFilter, {
+        includeSynced,
+        syncedJobIds,
+        excludedUnsyncedJobIds,
+      });
       await logJobSyncLifecycle(req, 'started', {
         processed: jobs.length,
         totalUnsynced,
@@ -205,7 +213,7 @@ export default async function handler(req, res) {
   } catch (_) {}
 
   try {
-    const preview = await getSyncPreview(supabase, dateFilter, { includeSynced, syncedJobIds });
+    const preview = await getSyncPreview(supabase, dateFilter, { includeSynced, syncedJobIds, excludedUnsyncedJobIds });
     const totalUnsynced = preview.unsyncedJobs;
     const limit = resolveBatchLimit(body, preview.toProcess);
 
@@ -268,7 +276,11 @@ export default async function handler(req, res) {
       message: `Loaded ${limit.toLocaleString()} job(s). Do not refresh until complete.`,
     });
 
-    const jobs = await fetchJobsForSapSync(supabase, limit, dateFilter, { includeSynced, syncedJobIds });
+    const jobs = await fetchJobsForSapSync(supabase, limit, dateFilter, {
+        includeSynced,
+        syncedJobIds,
+        excludedUnsyncedJobIds,
+      });
 
     await logJobSyncLifecycle(req, 'started', {
       processed: jobs.length,
