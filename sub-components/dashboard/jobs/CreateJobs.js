@@ -1521,7 +1521,13 @@ const AddNewJobs = ({ validateJobForm }) => {
               },
             },
       }));
-      return;
+
+      // CP* codes never exist in SAP; once converted, service calls live under the
+      // linked SAP code (sap_card_code), which loadServiceCallsForSelection includes.
+      if (String(selectedCustomer?.sap_card_code || selectedOption?.sap_card_code || "").trim()) {
+        return loadServiceCallsForSelection();
+      }
+      return [];
     }
 
     // Service calls load after contacts/locations/equipment; show loading meanwhile.
@@ -1834,200 +1840,205 @@ const AddNewJobs = ({ validateJobForm }) => {
       });
     }
 
-    // Fetch service calls from SAP Service Layer (sql10 + OData fallback; sibling L/C codes)
-    const cardCode = String(
-      selectedCustomer?.cardCode || selectedOption?.cardCode || selectedOption?.value || ""
-    ).trim();
-    const relatedCardCodes = [];
-    const relatedSapCode = String(
-      selectedCustomer?.sap_card_code || selectedOption?.sap_card_code || ""
-    ).trim();
-    if (
-      relatedSapCode &&
-      relatedSapCode.toUpperCase() !== cardCode.toUpperCase()
-    ) {
-      relatedCardCodes.push(relatedSapCode);
-    }
-
-    const applyLocalServiceCallFallback = async () => {
-      try {
-        const customerId =
-          selectedCustomer?.customerId || selectedOption?.customerId;
-        return await fetchLocalOpenServiceCalls(customerId, cardCode);
-      } catch (localScErr) {
-        console.warn("Local service_call fallback:", localScErr);
-        return [];
+    // Hoisted so the portal branch above can call it too.
+    async function loadServiceCallsForSelection() {
+      // Fetch service calls from SAP Service Layer (sql10 + OData fallback; sibling L/C codes)
+      const cardCode = String(
+        selectedCustomer?.cardCode || selectedOption?.cardCode || selectedOption?.value || ""
+      ).trim();
+      const relatedCardCodes = [];
+      const relatedSapCode = String(
+        selectedCustomer?.sap_card_code || selectedOption?.sap_card_code || ""
+      ).trim();
+      if (
+        relatedSapCode &&
+        relatedSapCode.toUpperCase() !== cardCode.toUpperCase()
+      ) {
+        relatedCardCodes.push(relatedSapCode);
       }
-    };
 
-    const toastServiceCallEmpty = (sessionIssue) => {
-      if (sessionIssue) {
-        toast.error(
-          "SAP session unavailable — log in to SAP (or renew B1 session) to load service calls.",
-          {
-            duration: 6000,
-            style: {
-              background: "#fff",
-              color: "#dc3545",
-              padding: "16px",
-              borderLeft: "6px solid #dc3545",
-            },
-          }
-        );
-        return;
-      }
-      const sapLeadCode =
-        selectedCustomer?.sap_card_code || selectedOption?.sap_card_code;
-      const emptyHint = sapLeadCode
-        ? `No open service calls under ${cardCode} (also checked ${sapLeadCode}). Open quotations do not create service calls — create a Service Call in SAP first.`
-        : `No open service calls found for ${cardCode}. Open quotations do not create service calls — create a Service Call in SAP first.`;
-      toast(emptyHint, {
-        icon: "⚠️",
-        duration: 5000,
-        style: {
-          background: "#fff",
-          color: "#856404",
-          padding: "16px",
-          borderLeft: "6px solid #ffc107",
-        },
-      });
-    };
-
-    const toastServiceCallLoaded = (rows) => {
-      const fromLocal = rows.some((sc) => sc.fromLocal);
-      toast.success(
-        fromLocal
-          ? `Loaded ${rows.length} local service call(s) (SAP returned none).`
-          : `Successfully fetched ${rows.length} service calls.`,
-        {
-          duration: 5000,
-          style: {
-            background: "#fff",
-            color: "#28a745",
-            padding: "16px",
-            borderLeft: "6px solid #28a745",
-          },
-          iconTheme: {
-            primary: "#28a745",
-            secondary: "#fff",
-          },
-        }
-      );
-    };
-
-    let loadedServiceCalls = [];
-    setServiceCallsLoading(true);
-    try {
-      const serviceCallResponse = await fetch("/api/getServiceCall", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ cardCode, relatedCardCodes }),
-      });
-
-      if (!serviceCallResponse.ok) {
-        let errorPayload = null;
+      const applyLocalServiceCallFallback = async () => {
         try {
-          errorPayload = await serviceCallResponse.json();
-        } catch {
-          errorPayload = null;
+          const customerId =
+            selectedCustomer?.customerId || selectedOption?.customerId;
+          return await fetchLocalOpenServiceCalls(customerId, cardCode);
+        } catch (localScErr) {
+          console.warn("Local service_call fallback:", localScErr);
+          return [];
         }
-        console.error(
-          "Failed to fetch service calls:",
-          serviceCallResponse.status,
-          errorPayload
-        );
+      };
 
-        const localRows = await applyLocalServiceCallFallback();
-        loadedServiceCalls = localRows;
-        setServiceCalls(localRows);
-        setSalesOrders([]);
-
-        if (localRows.length > 0) {
-          toastServiceCallLoaded(localRows);
-        } else {
-          const sessionIssue =
-            serviceCallResponse.status === 401 || errorPayload?.sessionMissing;
-          if (sessionIssue) {
-            toastServiceCallEmpty(true);
-          } else {
-            toast.error("Failed to fetch service calls from SAP. Please try again.", {
-              duration: 5000,
+      const toastServiceCallEmpty = (sessionIssue) => {
+        if (sessionIssue) {
+          toast.error(
+            "SAP session unavailable — log in to SAP (or renew B1 session) to load service calls.",
+            {
+              duration: 6000,
               style: {
                 background: "#fff",
                 color: "#dc3545",
                 padding: "16px",
                 borderLeft: "6px solid #dc3545",
               },
-            });
-          }
+            }
+          );
+          return;
         }
-      } else {
-        const serviceCallsData = await serviceCallResponse.json();
-        const sapRows = Array.isArray(serviceCallsData) ? serviceCallsData : [];
-
-        let formattedServiceCalls = sapRows.map((item) => {
-          const subject = item.subject || "";
-          const suffix =
-            item.fetchedForCardCode && item.fetchedForCardCode !== cardCode
-              ? ` (${item.fetchedForCardCode})`
-              : "";
-          return {
-            value: item.serviceCallID,
-            label: item.serviceCallID + " - " + subject + suffix,
-            serviceCallID: item.serviceCallID,
-            subject: item.subject,
-            customerName: item.customerName,
-            createDate: item.createDate,
-            createTime: item.createTime,
-            description: item.description,
-            fetchedForCardCode: item.fetchedForCardCode,
-          };
-        });
-
-        if (formattedServiceCalls.length === 0) {
-          formattedServiceCalls = await applyLocalServiceCallFallback();
-        }
-
-        loadedServiceCalls = formattedServiceCalls;
-        setServiceCalls(formattedServiceCalls);
-        setSalesOrders([]);
-
-        if (formattedServiceCalls.length === 0) {
-          toastServiceCallEmpty(false);
-        } else {
-          toastServiceCallLoaded(formattedServiceCalls);
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching service calls:", error);
-      const localRows = await applyLocalServiceCallFallback();
-      loadedServiceCalls = localRows;
-      setServiceCalls(localRows);
-      setSalesOrders([]);
-      if (localRows.length > 0) {
-        toastServiceCallLoaded(localRows);
-      } else {
-        toast.error("Failed to fetch service calls. Please try again.", {
+        const sapLeadCode =
+          selectedCustomer?.sap_card_code || selectedOption?.sap_card_code;
+        const emptyHint = sapLeadCode
+          ? `No open service calls under ${cardCode} (also checked ${sapLeadCode}). Open quotations do not create service calls — create a Service Call in SAP first.`
+          : `No open service calls found for ${cardCode}. Open quotations do not create service calls — create a Service Call in SAP first.`;
+        toast(emptyHint, {
+          icon: "⚠️",
           duration: 5000,
           style: {
             background: "#fff",
-            color: "#dc3545",
+            color: "#856404",
             padding: "16px",
-            borderLeft: "6px solid #dc3545",
-          },
-          iconTheme: {
-            primary: "#dc3545",
-            secondary: "#fff",
+            borderLeft: "6px solid #ffc107",
           },
         });
+      };
+
+      const toastServiceCallLoaded = (rows) => {
+        const fromLocal = rows.some((sc) => sc.fromLocal);
+        toast.success(
+          fromLocal
+            ? `Loaded ${rows.length} local service call(s) (SAP returned none).`
+            : `Successfully fetched ${rows.length} service calls.`,
+          {
+            duration: 5000,
+            style: {
+              background: "#fff",
+              color: "#28a745",
+              padding: "16px",
+              borderLeft: "6px solid #28a745",
+            },
+            iconTheme: {
+              primary: "#28a745",
+              secondary: "#fff",
+            },
+          }
+        );
+      };
+
+      let loadedServiceCalls = [];
+      setServiceCallsLoading(true);
+      try {
+        const serviceCallResponse = await fetch("/api/getServiceCall", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ cardCode, relatedCardCodes }),
+        });
+
+        if (!serviceCallResponse.ok) {
+          let errorPayload = null;
+          try {
+            errorPayload = await serviceCallResponse.json();
+          } catch {
+            errorPayload = null;
+          }
+          console.error(
+            "Failed to fetch service calls:",
+            serviceCallResponse.status,
+            errorPayload
+          );
+
+          const localRows = await applyLocalServiceCallFallback();
+          loadedServiceCalls = localRows;
+          setServiceCalls(localRows);
+          setSalesOrders([]);
+
+          if (localRows.length > 0) {
+            toastServiceCallLoaded(localRows);
+          } else {
+            const sessionIssue =
+              serviceCallResponse.status === 401 || errorPayload?.sessionMissing;
+            if (sessionIssue) {
+              toastServiceCallEmpty(true);
+            } else {
+              toast.error("Failed to fetch service calls from SAP. Please try again.", {
+                duration: 5000,
+                style: {
+                  background: "#fff",
+                  color: "#dc3545",
+                  padding: "16px",
+                  borderLeft: "6px solid #dc3545",
+                },
+              });
+            }
+          }
+        } else {
+          const serviceCallsData = await serviceCallResponse.json();
+          const sapRows = Array.isArray(serviceCallsData) ? serviceCallsData : [];
+
+          let formattedServiceCalls = sapRows.map((item) => {
+            const subject = item.subject || "";
+            const suffix =
+              item.fetchedForCardCode && item.fetchedForCardCode !== cardCode
+                ? ` (${item.fetchedForCardCode})`
+                : "";
+            return {
+              value: item.serviceCallID,
+              label: item.serviceCallID + " - " + subject + suffix,
+              serviceCallID: item.serviceCallID,
+              subject: item.subject,
+              customerName: item.customerName,
+              createDate: item.createDate,
+              createTime: item.createTime,
+              description: item.description,
+              fetchedForCardCode: item.fetchedForCardCode,
+            };
+          });
+
+          if (formattedServiceCalls.length === 0) {
+            formattedServiceCalls = await applyLocalServiceCallFallback();
+          }
+
+          loadedServiceCalls = formattedServiceCalls;
+          setServiceCalls(formattedServiceCalls);
+          setSalesOrders([]);
+
+          if (formattedServiceCalls.length === 0) {
+            toastServiceCallEmpty(false);
+          } else {
+            toastServiceCallLoaded(formattedServiceCalls);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching service calls:", error);
+        const localRows = await applyLocalServiceCallFallback();
+        loadedServiceCalls = localRows;
+        setServiceCalls(localRows);
+        setSalesOrders([]);
+        if (localRows.length > 0) {
+          toastServiceCallLoaded(localRows);
+        } else {
+          toast.error("Failed to fetch service calls. Please try again.", {
+            duration: 5000,
+            style: {
+              background: "#fff",
+              color: "#dc3545",
+              padding: "16px",
+              borderLeft: "6px solid #dc3545",
+            },
+            iconTheme: {
+              primary: "#dc3545",
+              secondary: "#fff",
+            },
+          });
+        }
+      } finally {
+        setServiceCallsLoading(false);
       }
-    } finally {
-      setServiceCallsLoading(false);
+      return loadedServiceCalls;
     }
-    return loadedServiceCalls;
+
+    return loadServiceCallsForSelection();
   };
 
   const handleJobContactTypeChange = (selectedOption) => {
