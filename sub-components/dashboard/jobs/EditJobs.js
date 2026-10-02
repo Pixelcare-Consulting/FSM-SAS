@@ -535,6 +535,32 @@ function unionSelectOption(options, extraOption) {
   return [...list, extraOption];
 }
 
+function relatedSapCardCodes(customer, cardCode) {
+  const sapCode = String(customer?.sap_card_code || "").trim();
+  if (!sapCode || sapCode.toUpperCase() === String(cardCode || "").toUpperCase()) return [];
+  return [sapCode];
+}
+
+function mapServiceCallsToOptions(serviceCallsData, cardCode) {
+  return (Array.isArray(serviceCallsData) ? serviceCallsData : []).map((item) => {
+    const subject = item.subject || "";
+    const suffix = item.fetchedForCardCode && item.fetchedForCardCode !== cardCode
+      ? ` (${item.fetchedForCardCode})`
+      : "";
+    return {
+      value: item.serviceCallID,
+      label: `${item.serviceCallID} - ${subject}${suffix}`,
+      serviceCallID: item.serviceCallID,
+      subject: item.subject,
+      customerName: item.customerName,
+      createDate: item.createDate,
+      createTime: item.createTime,
+      description: item.description,
+      fetchedForCardCode: item.fetchedForCardCode,
+    };
+  });
+}
+
 function resolveServiceCallSubjectForUpsert(selectedServiceCall) {
   const raw =
     selectedServiceCall?.subject != null
@@ -1864,6 +1890,35 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
         setSalesOrdersHydrated(false);
       }
 
+      // CP* codes never exist in SAP; once converted, service calls live under the
+      // linked SAP code (L*/C* in sap_card_code), same as CreateJobs.
+      const portalRelatedCardCodes = relatedSapCardCodes(selectedCustomer, portalCardCode);
+      if (portalCardCode && portalRelatedCardCodes.length > 0) {
+        try {
+          const serviceCallResponse = await fetch("/api/getServiceCall", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              cardCode: portalCardCode,
+              relatedCardCodes: portalRelatedCardCodes,
+            }),
+          });
+          if (serviceCallResponse.ok) {
+            const portalServiceCalls = mapServiceCallsToOptions(
+              await serviceCallResponse.json(),
+              portalCardCode
+            );
+            // Keep the job's saved service call option alongside the fetched list.
+            setServiceCalls((prev) =>
+              (Array.isArray(prev) ? prev : []).reduce(unionSelectOption, portalServiceCalls)
+            );
+          }
+        } catch (portalScErr) {
+          console.warn("Portal customer service call load failed:", portalScErr);
+        }
+      }
+
       if (isSameAsInitialCustomer) {
         const savedContact = initialJobData?.contact;
         const savedLocation = initialJobData?.location;
@@ -2090,13 +2145,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
       let formattedServiceCalls = [];
       let matchedServiceCall = null;
 
-      const relatedCardCodes = [];
-      if (selectedCustomer?.sap_card_code) {
-        const sapCode = String(selectedCustomer.sap_card_code).trim();
-        if (sapCode && sapCode.toUpperCase() !== String(cardCode).toUpperCase()) {
-          relatedCardCodes.push(sapCode);
-        }
-      }
+      const relatedCardCodes = relatedSapCardCodes(selectedCustomer, cardCode);
 
       const serviceCallResponse = await fetch("/api/getServiceCall", {
         method: "POST",
@@ -2106,27 +2155,10 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
       });
 
       if (serviceCallResponse.ok) {
-        const serviceCallsData = await serviceCallResponse.json();
-        formattedServiceCalls = (Array.isArray(serviceCallsData)
-          ? serviceCallsData
-          : []
-        ).map((item) => {
-          const subject = item.subject || "";
-          const suffix = item.fetchedForCardCode && item.fetchedForCardCode !== cardCode
-            ? ` (${item.fetchedForCardCode})`
-            : "";
-          return {
-            value: item.serviceCallID,
-            label: `${item.serviceCallID} - ${subject}${suffix}`,
-            serviceCallID: item.serviceCallID,
-            subject: item.subject,
-            customerName: item.customerName,
-            createDate: item.createDate,
-            createTime: item.createTime,
-            description: item.description,
-            fetchedForCardCode: item.fetchedForCardCode,
-          };
-        });
+        formattedServiceCalls = mapServiceCallsToOptions(
+          await serviceCallResponse.json(),
+          cardCode
+        );
       }
 
       // When SAP returns no open calls, surface open/in-progress local service_call rows.
