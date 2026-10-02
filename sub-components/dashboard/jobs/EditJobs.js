@@ -4922,6 +4922,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
               <Form.Group as={Col} md="3" controlId="serviceCall">
                 <div className="d-flex justify-content-between align-items-center mb-2">
                   <Form.Label className="mb-0">Service Call</Form.Label>
+                  {/* Temporarily hidden: custom service call toggle
                   <Form.Check
                     type="checkbox"
                     id="custom-service-call-check"
@@ -4931,6 +4932,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
                     disabled={isFormDisabled}
                     onChange={(e) => handleCustomServiceCallToggle(e.target.checked)}
                   />
+                  */}
                 </div>
                 {useCustomServiceCall ? (
                   <Form.Control
