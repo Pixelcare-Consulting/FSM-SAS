@@ -186,7 +186,7 @@ async function enrichJobImagesForPdf(jobImages, adminClient, jobId) {
   }
 
   // Videos can't be embedded in the jobsheet, and downloading them for base64 conversion is wasteful
-  const nonVideoMedia = jobImages.filter((img) => img.media_type !== 'video');
+  const nonVideoMedia = jobImages.filter((img) => img.media_type?.toLowerCase() !== 'video');
 
   const imageCandidates = nonVideoMedia.filter(
     (img) => img.media_type !== 'pdf' && img.image_url

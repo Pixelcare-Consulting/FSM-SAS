@@ -556,7 +556,7 @@ const JobSheetPDF = ({ jobData }) => {
         {/* Service Documentation Images */}
         {(() => {
           const images = (jobData.job_images || []).filter(img =>
-            img.media_type !== 'pdf' && img.media_type !== 'video' && (img.image_src || img.image_url)
+            img.media_type !== 'pdf' && img.media_type?.toLowerCase() !== 'video' && (img.image_src || img.image_url)
           );
 
           return images.length > 0 ? (

@@ -2981,14 +2981,15 @@ const JobDetails = () => {
           upsert: false,
           contentType: file.type,
         });
-        // Images omit media_type so the database uses its DEFAULT ('image'); videos must be tagged explicitly
+        // Images omit media_type so the database uses its DEFAULT ('image'); videos must be tagged explicitly.
+        // Uppercase 'VIDEO' matches what the mobile app writes and checks for — it won't play lowercase rows.
         const insertData = {
           job_id: jobId,
           image_url: uploadResult.url,
           filename: file.name,
           description: description || null,
           created_by: createdByUserId,
-          ...(mediaType === 'video' ? { media_type: 'video' } : {}),
+          ...(mediaType === 'video' ? { media_type: 'VIDEO' } : {}),
         };
 
         let { data: mediaRecord, error: mediaError } = await supabase
@@ -3032,7 +3033,7 @@ const JobDetails = () => {
             ? formatDateDDMMYYYYWithTime(mediaRecord.created_at)
             : new Date().toLocaleString(),
           uploadedBy: currentUserFullName || "You",
-          media_type: mediaRecord?.media_type ?? "image",
+          media_type: (mediaRecord?.media_type ?? "image").toLowerCase(),
           created_by: createdByUserId,
         });
       }
