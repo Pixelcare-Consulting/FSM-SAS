@@ -260,12 +260,74 @@ function AddressChangesPanel({ addressChanges }) {
   );
 }
 
+const EQUIPMENT_ACTION_LABELS = {
+  add: { label: 'Add', variant: 'success' },
+  update: { label: 'Update', variant: 'primary' },
+  remove: { label: 'Remove from FSM', variant: 'danger' },
+};
+
+function EquipmentChangesPanel({ equipmentChanges }) {
+  if (!equipmentChanges) return null;
+  if (equipmentChanges.error) {
+    return (
+      <div className="bg-light border-top px-2 py-1 small text-warning">
+        Could not preview equipment ({equipmentChanges.error}) — the sync will still check it.
+      </div>
+    );
+  }
+  const rows = Array.isArray(equipmentChanges.changes) ? equipmentChanges.changes : [];
+  if (rows.length === 0) return null;
+  return (
+    <div className="bg-light border-top">
+      <table className="table table-sm table-borderless mb-0 small">
+        <thead>
+          <tr className="text-muted text-uppercase" style={{ fontSize: '0.68rem', letterSpacing: '0.04em' }}>
+            <th style={{ width: '32%' }}>Equipment</th>
+            <th style={{ width: '14%' }}>Change</th>
+            <th style={{ width: '54%' }}>Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const meta = EQUIPMENT_ACTION_LABELS[row.action] || EQUIPMENT_ACTION_LABELS.update;
+            return (
+              <tr key={`${row.action}-${row.itemCode}-${row.serialNumber}`}>
+                <td className="align-top fw-medium">
+                  {row.itemCode}
+                  {row.serialNumber ? <span className="text-muted fw-normal"> · {row.serialNumber}</span> : null}
+                </td>
+                <td className="align-top">
+                  <Badge bg={meta.variant} className="fw-normal" style={{ fontSize: '0.7rem' }}>
+                    {meta.label}
+                  </Badge>
+                </td>
+                <td className="align-top">
+                  {row.action === 'update' && Array.isArray(row.fields) && row.fields.length
+                    ? row.fields.join(', ')
+                    : <AddressValue value={row.itemName} />}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function equipmentChangeCount(equipmentChanges) {
+  if (!equipmentChanges || equipmentChanges.error) return 0;
+  return (equipmentChanges.toInsert || 0) + (equipmentChanges.toUpdate || 0) + (equipmentChanges.toRemove || 0);
+}
+
 function PreviewItemRow({ item }) {
   const [expanded, setExpanded] = useState(false);
   const addressChanges = effectiveAddressChanges(item.addressChanges);
   const addressChangeCount = addressChanges.length;
   const fieldChangeCount = Array.isArray(item.fieldChanges) ? item.fieldChanges.length : 0;
-  const canExpand = addressChangeCount > 0 || fieldChangeCount > 0;
+  const equipmentCount = equipmentChangeCount(item.equipmentChanges);
+  const equipmentError = Boolean(item.equipmentChanges?.error);
+  const canExpand = addressChangeCount > 0 || fieldChangeCount > 0 || equipmentCount > 0 || equipmentError;
   const toggleExpanded = () => {
     if (canExpand) setExpanded((prev) => !prev);
   };
@@ -300,6 +362,10 @@ function PreviewItemRow({ item }) {
                 addressChangeCount > 0
                   ? `${addressChangeCount} address change${addressChangeCount === 1 ? '' : 's'}`
                   : null,
+                equipmentCount > 0
+                  ? `${equipmentCount} equipment change${equipmentCount === 1 ? '' : 's'}`
+                  : null,
+                equipmentError ? 'equipment not previewed' : null,
               ]
                 .filter(Boolean)
                 .join(' · ')}
@@ -314,6 +380,7 @@ function PreviewItemRow({ item }) {
           <td colSpan={5} className="p-0">
             <FieldChangesPanel fieldChanges={item.fieldChanges} />
             <AddressChangesPanel addressChanges={addressChanges} />
+            <EquipmentChangesPanel equipmentChanges={item.equipmentChanges} />
           </td>
         </tr>
       ) : null}
