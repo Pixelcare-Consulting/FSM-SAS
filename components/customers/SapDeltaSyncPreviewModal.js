@@ -192,7 +192,7 @@ function AddressValue({ value, muted = false }) {
 function FieldChangesPanel({ fieldChanges }) {
   if (!Array.isArray(fieldChanges) || fieldChanges.length === 0) return null;
   return (
-    <div className="bg-light border-top">
+    <div className="bg-light">
       <table className="table table-sm table-borderless mb-0 small">
         <thead>
           <tr className="text-muted text-uppercase" style={{ fontSize: '0.68rem', letterSpacing: '0.04em' }}>
@@ -223,7 +223,7 @@ function AddressChangesPanel({ addressChanges }) {
   if (!Array.isArray(addressChanges) || addressChanges.length === 0) return null;
 
   return (
-    <div className="bg-light border-top">
+    <div className="bg-light">
       <table className="table table-sm table-borderless mb-0 small">
         <thead>
           <tr className="text-muted text-uppercase" style={{ fontSize: '0.68rem', letterSpacing: '0.04em' }}>
@@ -270,7 +270,7 @@ function EquipmentChangesPanel({ equipmentChanges }) {
   if (!equipmentChanges) return null;
   if (equipmentChanges.error) {
     return (
-      <div className="bg-light border-top px-2 py-1 small text-warning">
+      <div className="px-2 py-1 small text-warning">
         Could not preview equipment ({equipmentChanges.error}) — the sync will still check it.
       </div>
     );
@@ -278,7 +278,7 @@ function EquipmentChangesPanel({ equipmentChanges }) {
   const rows = Array.isArray(equipmentChanges.changes) ? equipmentChanges.changes : [];
   if (rows.length === 0) return null;
   return (
-    <div className="bg-light border-top">
+    <div className="bg-light">
       <table className="table table-sm table-borderless mb-0 small">
         <thead>
           <tr className="text-muted text-uppercase" style={{ fontSize: '0.68rem', letterSpacing: '0.04em' }}>
@@ -315,19 +315,74 @@ function EquipmentChangesPanel({ equipmentChanges }) {
   );
 }
 
-function equipmentChangeCount(equipmentChanges) {
-  if (!equipmentChanges || equipmentChanges.error) return 0;
-  return (equipmentChanges.toInsert || 0) + (equipmentChanges.toUpdate || 0) + (equipmentChanges.toRemove || 0);
+function countBy(rows, labelFor) {
+  const counts = new Map();
+  for (const row of rows) {
+    const label = labelFor(row);
+    counts.set(label, (counts.get(label) || 0) + 1);
+  }
+  return [...counts].map(([label, n]) => `${n} ${label}`).join(' · ');
+}
+
+function addressRowLabel(row) {
+  if (row.action === 'remove') return 'remove';
+  return row.action === 'add' ? 'add' : 'update';
+}
+
+function equipmentRows(equipmentChanges) {
+  if (!equipmentChanges || equipmentChanges.error) return [];
+  return Array.isArray(equipmentChanges.changes) ? equipmentChanges.changes : [];
+}
+
+/** One line per kind of change the sync will make for this row, e.g. "Equipment: 3 add". */
+function describeItemChanges(item, addressChanges) {
+  const parts = [];
+  const fieldChanges = Array.isArray(item.fieldChanges) ? item.fieldChanges : [];
+  if (fieldChanges.length > 0) {
+    parts.push(`Fields: ${fieldChanges.map((row) => row.label).join(', ')}`);
+  }
+  if (addressChanges.length > 0) {
+    parts.push(`Addresses: ${countBy(addressChanges, addressRowLabel)}`);
+  }
+  const equipment = equipmentRows(item.equipmentChanges);
+  if (equipment.length > 0) {
+    parts.push(`Equipment: ${countBy(equipment, (row) => row.action)}`);
+  }
+  if (item.equipmentChanges?.error) parts.push('Equipment: could not preview');
+  return parts;
+}
+
+/** Why a row is listed when it has no itemized changes to expand. */
+function fallbackChangeNote(item) {
+  if (item.action === 'promote') return 'Promote portal customer to SAP code';
+  if (item.action === 'insert') return 'New record from SAP';
+  if (item.action === 'update' && !Array.isArray(item.fieldChanges)) {
+    return 'Could not compare with SAP — full re-sync';
+  }
+  return '—';
+}
+
+function ChangeSection({ title, children }) {
+  return (
+    <div className="border-top">
+      <div
+        className="px-2 pt-2 text-muted text-uppercase fw-semibold"
+        style={{ fontSize: '0.68rem', letterSpacing: '0.04em' }}
+      >
+        {title}
+      </div>
+      {children}
+    </div>
+  );
 }
 
 function PreviewItemRow({ item }) {
   const [expanded, setExpanded] = useState(false);
   const addressChanges = effectiveAddressChanges(item.addressChanges);
-  const addressChangeCount = addressChanges.length;
-  const fieldChangeCount = Array.isArray(item.fieldChanges) ? item.fieldChanges.length : 0;
-  const equipmentCount = equipmentChangeCount(item.equipmentChanges);
-  const equipmentError = Boolean(item.equipmentChanges?.error);
-  const canExpand = addressChangeCount > 0 || fieldChangeCount > 0 || equipmentCount > 0 || equipmentError;
+  const hasFieldChanges = Array.isArray(item.fieldChanges) && item.fieldChanges.length > 0;
+  const hasEquipment = equipmentRows(item.equipmentChanges).length > 0 || Boolean(item.equipmentChanges?.error);
+  const summary = describeItemChanges(item, addressChanges);
+  const canExpand = summary.length > 0;
   const toggleExpanded = () => {
     if (canExpand) setExpanded((prev) => !prev);
   };
@@ -349,38 +404,41 @@ function PreviewItemRow({ item }) {
           {item.cardName}
         </td>
         <td className="text-muted small text-uppercase">{item.entityType}</td>
-        <td className="small text-muted text-nowrap">
+        <td className="small text-muted">
           {canExpand ? (
-            <span>
+            <div className="d-flex">
               <span className="me-1" aria-hidden>
                 {expanded ? '▾' : '▸'}
               </span>
-              {[
-                fieldChangeCount > 0
-                  ? `${fieldChangeCount} field change${fieldChangeCount === 1 ? '' : 's'}`
-                  : null,
-                addressChangeCount > 0
-                  ? `${addressChangeCount} address change${addressChangeCount === 1 ? '' : 's'}`
-                  : null,
-                equipmentCount > 0
-                  ? `${equipmentCount} equipment change${equipmentCount === 1 ? '' : 's'}`
-                  : null,
-                equipmentError ? 'equipment not previewed' : null,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </span>
+              <div>
+                {summary.map((line) => (
+                  <div key={line}>{line}</div>
+                ))}
+              </div>
+            </div>
           ) : (
-            '—'
+            fallbackChangeNote(item)
           )}
         </td>
       </tr>
       {expanded && canExpand ? (
         <tr>
-          <td colSpan={5} className="p-0">
-            <FieldChangesPanel fieldChanges={item.fieldChanges} />
-            <AddressChangesPanel addressChanges={addressChanges} />
-            <EquipmentChangesPanel equipmentChanges={item.equipmentChanges} />
+          <td colSpan={5} className="p-0 bg-light">
+            {hasFieldChanges ? (
+              <ChangeSection title="Fields">
+                <FieldChangesPanel fieldChanges={item.fieldChanges} />
+              </ChangeSection>
+            ) : null}
+            {addressChanges.length > 0 ? (
+              <ChangeSection title="Addresses">
+                <AddressChangesPanel addressChanges={addressChanges} />
+              </ChangeSection>
+            ) : null}
+            {hasEquipment ? (
+              <ChangeSection title="Equipment">
+                <EquipmentChangesPanel equipmentChanges={item.equipmentChanges} />
+              </ChangeSection>
+            ) : null}
           </td>
         </tr>
       ) : null}
@@ -634,7 +692,7 @@ export default function SapDeltaSyncPreviewModal({
                 </span>
               </div>
               <p className="small text-muted mb-2">
-                Click a row to expand field and address Before / After details.
+                Click a row to see each field, address and equipment change.
               </p>
               <div className="table-responsive border rounded" style={{ maxHeight: 420 }}>
                 <table className="table table-sm table-hover mb-0 align-middle">
@@ -644,7 +702,7 @@ export default function SapDeltaSyncPreviewModal({
                       <th>Code</th>
                       <th>Name</th>
                       <th>Type</th>
-                      <th>Addresses</th>
+                      <th>Changes</th>
                     </tr>
                   </thead>
                   <tbody>
