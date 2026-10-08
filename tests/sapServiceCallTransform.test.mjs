@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 
 import {
+  activityCustomerForJob,
   buildServiceCallActivityLine,
   buildServiceCallPatchBody,
   deriveInvoiceStatusFlag,
@@ -198,6 +199,33 @@ assert.equal(
 
   const picked = { id: 'j2', use_custom_service_call: false, ...refs };
   assert.equal(withoutCustomJobRefs(picked), picked, 'SAP-picked refs are kept');
+}
+
+{
+  const customer = { id: 'c1', customer_code: 'C000111', customer_name: 'Job Customer', sap_card_code: null };
+  const ownerJob = {
+    service_call: { call_number: '9001' },
+    service_call_owner_code: 'C000222',
+    service_call_owner_name: 'Call Owner',
+  };
+  const owner = activityCustomerForJob(ownerJob, customer);
+  assert.equal(owner.customer_code, 'C000222', 'Activity is booked under the service call owner');
+  assert.equal(owner.customer_name, 'Call Owner');
+  assert.equal(owner.id, 'c1', 'portal job customer id is kept');
+
+  const leadOwner = activityCustomerForJob(
+    { ...ownerJob, service_call_owner_code: 'L000333' },
+    { ...customer, customer_code: 'CP0001', sap_card_code: 'L000999' }
+  );
+  assert.equal(leadOwner.customer_code, 'L000333');
+  assert.equal(leadOwner.sap_card_code, null, "job customer's lead code never overrides the owner");
+
+  assert.equal(activityCustomerForJob({ service_call: { call_number: '9001' } }, customer), customer, 'own call keeps the job customer');
+  assert.equal(
+    activityCustomerForJob(withoutCustomJobRefs({ ...ownerJob, use_custom_service_call: true }), customer),
+    customer,
+    'custom refs never switch the CardCode'
+  );
 }
 
 console.log('sapServiceCallTransform tests passed');

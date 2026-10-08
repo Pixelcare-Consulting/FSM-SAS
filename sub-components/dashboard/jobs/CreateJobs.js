@@ -61,6 +61,10 @@ import {
   resolveSapCustomerOption,
 } from "../../../lib/jobs/serviceCallSearch";
 import ServiceCallSearchInput from "../../../components/jobs/ServiceCallSearchInput";
+import {
+  findCustomerIdByCardCode,
+  foreignServiceCallOwnerCode,
+} from "../../../lib/jobs/serviceCallOwner";
 
 const JOB_STATUS_DOT_FALLBACK = "currentColor";
 
@@ -2372,6 +2376,14 @@ const AddNewJobs = ({ validateJobForm }) => {
     selectedCustomer?.sap_card_code,
   ].filter(Boolean);
 
+  // A call picked from another customer's search results: the job stays under the
+  // selected customer, and the call's owner is shown separately.
+  const serviceCallOwner =
+    selectedCustomer &&
+    foreignServiceCallOwnerCode(selectedServiceCall, selectedCustomerCardCodes)
+      ? resolveSapCustomerOption(customers, selectedServiceCall)
+      : null;
+
   // Toggling Custom either way starts Service Call / Sales Order from blank.
   const handleCustomServiceCallToggle = (checked) => {
     setUseCustomServiceCall(checked);
@@ -2380,7 +2392,8 @@ const AddNewJobs = ({ validateJobForm }) => {
     setSalesOrders([]);
   };
 
-  // Picking a call from another customer switches to that customer first.
+  // With no customer selected yet, picking a call selects its owner as the customer.
+  // With a customer selected, the customer is kept (see serviceCallOwner).
   const handleServiceCallPick = async (option) => {
     try {
       await applyServiceCallPick(option);
@@ -2397,13 +2410,7 @@ const AddNewJobs = ({ validateJobForm }) => {
       return;
     }
 
-    const optionCardCode = String(option.customerCode || "").trim().toUpperCase();
-    const isOtherCustomer =
-      optionCardCode &&
-      !selectedCustomerCardCodes.some(
-        (code) => String(code).trim().toUpperCase() === optionCardCode
-      );
-    if (!isOtherCustomer) {
+    if (selectedCustomer || !option.customerCode) {
       setServiceCallPickPending({ option, message: "Loading sales orders..." });
       await handleSelectedServiceCallChange(option);
       return;
@@ -3391,8 +3398,15 @@ const AddNewJobs = ({ validateJobForm }) => {
             } else {
               // Service call doesn't exist, create it
               // Get service call data from selectedServiceCall (preserved from API)
+              // Another customer's call is recorded under its owner when the owner is in the portal.
+              const ownerCustomerId = serviceCallOwner
+                ? await findCustomerIdByCardCode(supabase, serviceCallOwner.cardCode)
+                : null;
               const serviceCallData = {
-                customer_id: customerId,
+                customer_id: ownerCustomerId || customerId,
+                customer_name_sap: serviceCallOwner
+                  ? serviceCallOwner.cardName || selectedServiceCall.customerName || null
+                  : undefined,
                 call_number: selectedServiceCall.value.toString(),
                 subject: selectedServiceCall.subject || `Service Call ${selectedServiceCall.value}`,
                 description: selectedServiceCall.description || null,
@@ -3500,6 +3514,12 @@ const AddNewJobs = ({ validateJobForm }) => {
             location_id: locationId,
             service_call_id: serviceCallId,
             use_custom_service_call: useCustomServiceCall,
+            service_call_owner_code:
+              serviceCallId && serviceCallOwner ? serviceCallOwner.cardCode : null,
+            service_call_owner_name:
+              serviceCallId && serviceCallOwner
+                ? serviceCallOwner.cardName || selectedServiceCall.customerName || null
+                : null,
             contact_id: contactId || null,
             job_number: currentJobNo,
             title: jobTitle,
@@ -4303,6 +4323,19 @@ const AddNewJobs = ({ validateJobForm }) => {
                 />
               </Form.Group>
             </Row>
+
+            {serviceCallOwner && (
+              <Row className="mb-3">
+                <Form.Group as={Col} md="7" controlId="serviceCallOwner">
+                  <Form.Label>Service Call Owner</Form.Label>
+                  <Form.Control type="text" value={serviceCallOwner.label} readOnly />
+                  <Form.Text className="text-muted">
+                    Service call {selectedServiceCall.value} belongs to this customer.
+                    The job stays under {selectedCustomer.label}.
+                  </Form.Text>
+                </Form.Group>
+              </Row>
+            )}
 
             <hr className="my-4" />
             <h5 className="mb-1">Primary Contact</h5>

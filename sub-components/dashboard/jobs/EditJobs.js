@@ -58,7 +58,15 @@ import {
   mergeWorkerSelectOptions,
 } from "../../../lib/jobs/assignableWorkerSelect";
 import { upsertJobCustomerLocation } from "../../../lib/jobs/upsertJobCustomerLocation";
-import { buildCustomJobRefOption } from "../../../lib/jobs/serviceCallSearch";
+import {
+  buildCustomJobRefOption,
+  resolveSapCustomerOption,
+} from "../../../lib/jobs/serviceCallSearch";
+import ServiceCallSearchInput from "../../../components/jobs/ServiceCallSearchInput";
+import {
+  findCustomerIdByCardCode,
+  foreignServiceCallOwnerCode,
+} from "../../../lib/jobs/serviceCallOwner";
 import { resolveContactIdFromSelection } from "../../../lib/jobs/upsertJobContactFromSelection";
 import {
   buildJobFormLocationPatch,
@@ -461,7 +469,7 @@ function findMatchingContactOption(formattedContacts, savedContact) {
  * Synthetic Select option when the job's Service Call ID is not in the live SAP list.
  * Prefers local service_call.subject; never uses "(saved)" as subject (avoids DB pollution on upsert).
  */
-async function buildSavedServiceCallOption(serviceCallID) {
+async function buildSavedServiceCallOption(serviceCallID, owner = null) {
   const id = String(serviceCallID ?? "").trim();
   if (!id) return null;
 
@@ -503,16 +511,29 @@ async function buildSavedServiceCallOption(serviceCallID) {
     label: subject ? `${callNumber} - ${subject}` : callNumber,
     serviceCallID: callNumber,
     subject,
+    ...owner,
   };
 }
 
-function buildSeededServiceCallOption(serviceCallID) {
+function buildSeededServiceCallOption(serviceCallID, owner = null) {
   if (serviceCallID == null || String(serviceCallID).trim() === "") return null;
   const id = String(serviceCallID).trim();
   return {
     value: id,
     label: id,
     serviceCallID: id,
+    ...owner,
+  };
+}
+
+/** Saved owner of the job's service call when it belongs to another customer. */
+function savedServiceCallOwner(jobData) {
+  const code = String(jobData?.serviceCallOwnerCode || "").trim();
+  if (!code) return null;
+  return {
+    customerCode: code,
+    customerName: jobData.serviceCallOwnerName || "",
+    fetchedForCardCode: code,
   };
 }
 
@@ -692,7 +713,10 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
   const [locationAddressTouched, setLocationAddressTouched] = useState(false);
   const [selectedWorkers, setSelectedWorkers] = useState([]);
   const [selectedServiceCall, setSelectedServiceCall] = useState(() =>
-    buildSeededServiceCallOption(initialJobData?.serviceCallID)
+    buildSeededServiceCallOption(
+      initialJobData?.serviceCallID,
+      savedServiceCallOwner(initialJobData)
+    )
   );
   const [selectedSalesOrder, setSelectedSalesOrder] = useState(() =>
     buildSeededSalesOrderOption(initialJobData?.salesOrderID)
@@ -716,7 +740,10 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
   const [workerSearchInput, setWorkerSearchInput] = useState("");
   const [equipments, setEquipments] = useState([]);
   const [serviceCalls, setServiceCalls] = useState(() => {
-    const option = buildSeededServiceCallOption(initialJobData?.serviceCallID);
+    const option = buildSeededServiceCallOption(
+      initialJobData?.serviceCallID,
+      savedServiceCallOwner(initialJobData)
+    );
     return option ? [option] : [];
   });
   const [salesOrders, setSalesOrders] = useState(() => {
@@ -893,11 +920,10 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
       }));
 
       if (initialJobData.serviceCallID) {
-        setSelectedServiceCall((prev) => prev || {
-          value: initialJobData.serviceCallID,
-          label: String(initialJobData.serviceCallID),
-          serviceCallID: initialJobData.serviceCallID,
-        });
+        setSelectedServiceCall((prev) => prev || buildSeededServiceCallOption(
+          initialJobData.serviceCallID,
+          savedServiceCallOwner(initialJobData)
+        ));
       }
 
       if (initialJobData.salesOrderID) {
@@ -2249,6 +2275,15 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
           if (!matchedServiceCall) {
             matchedServiceCall = buildSeededServiceCallOption(existingServiceCallID);
           }
+          // Keep the saved owner on a call that belongs to another customer.
+          const savedOwner = savedServiceCallOwner(initialJobData);
+          if (savedOwner && matchedServiceCall && !matchedServiceCall.customerCode) {
+            const owned = { ...matchedServiceCall, ...savedOwner };
+            formattedServiceCalls = formattedServiceCalls.map((sc) =>
+              sc === matchedServiceCall ? owned : sc
+            );
+            matchedServiceCall = owned;
+          }
           formattedServiceCalls = unionSelectOption(
             formattedServiceCalls,
             matchedServiceCall
@@ -2412,9 +2447,15 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
         setSalesOrders([]);
         setSalesOrdersHydrated(false);
       } else if (existingServiceCallID) {
-        matchedServiceCall = await buildSavedServiceCallOption(existingServiceCallID);
+        matchedServiceCall = await buildSavedServiceCallOption(
+          existingServiceCallID,
+          savedServiceCallOwner(initialJobData)
+        );
         if (!matchedServiceCall) {
-          matchedServiceCall = buildSeededServiceCallOption(existingServiceCallID);
+          matchedServiceCall = buildSeededServiceCallOption(
+            existingServiceCallID,
+            savedServiceCallOwner(initialJobData)
+          );
         }
         if (matchedServiceCall) {
           setServiceCalls((prev) => unionSelectOption(prev, matchedServiceCall));
@@ -2892,6 +2933,19 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
   useLayoutEffect(() => {
     fetchSalesOrdersForServiceCallRef.current = fetchSalesOrdersForServiceCall;
   });
+
+  const selectedCustomerCardCodes = [
+    resolveCustomerCardCode(formData, selectedCustomer),
+    selectedCustomer?.sap_card_code,
+  ].filter(Boolean);
+
+  // A call from another customer: the job stays under the selected customer, and
+  // the call's owner is shown separately (saved to jobs.service_call_owner_*).
+  const serviceCallOwner =
+    selectedCustomer &&
+    foreignServiceCallOwnerCode(selectedServiceCall, selectedCustomerCardCodes)
+      ? resolveSapCustomerOption(customers, selectedServiceCall)
+      : null;
 
   const handleSelectedServiceCallChange = async (selectedServiceCall) => {
     setSelectedServiceCall(selectedServiceCall);
@@ -3623,21 +3677,27 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
       if (serviceCallClearedByUser) {
         serviceCallId = null;
       } else if (selectedServiceCall?.value && customerId) {
+        // call_number is unique, so another customer's call is found under its owner.
         const { data: existingServiceCall } = await supabase
           .from('service_call')
           .select('id')
           .eq('call_number', selectedServiceCall.value.toString())
-          .eq('customer_id', customerId)
           .is('deleted_at', null)
           .maybeSingle();
 
         if (existingServiceCall) {
           serviceCallId = existingServiceCall.id;
         } else {
+          const ownerCustomerId = serviceCallOwner
+            ? await findCustomerIdByCardCode(supabase, serviceCallOwner.cardCode)
+            : null;
           const { data: newServiceCall, error: serviceCallError } = await supabase
             .from('service_call')
             .insert({
-              customer_id: customerId,
+              customer_id: ownerCustomerId || customerId,
+              customer_name_sap: serviceCallOwner
+                ? serviceCallOwner.cardName || selectedServiceCall.customerName || null
+                : undefined,
               call_number: selectedServiceCall.value.toString(),
               subject: resolveServiceCallSubjectForUpsert(selectedServiceCall),
               description: selectedServiceCall.description || null,
@@ -3741,6 +3801,15 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
         use_custom_service_call: useCustomServiceCall,
         contact_id: contactId || null,
       };
+      // Owner only changes with the call; an empty, uncleared picker keeps the saved one.
+      if (serviceCallClearedByUser || selectedServiceCall?.value) {
+        jobUpdateData.service_call_owner_code =
+          serviceCallId && serviceCallOwner ? serviceCallOwner.cardCode : null;
+        jobUpdateData.service_call_owner_name =
+          serviceCallId && serviceCallOwner
+            ? serviceCallOwner.cardName || selectedServiceCall.customerName || null
+            : null;
+      }
 
       await jobService.update(jobIdProp, jobUpdateData);
 
@@ -4462,6 +4531,19 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
               </Form.Group>
             </Row>
 
+            {serviceCallOwner && (
+              <Row className="mb-3">
+                <Form.Group as={Col} md="7" controlId="serviceCallOwner">
+                  <Form.Label>Service Call Owner</Form.Label>
+                  <Form.Control type="text" value={serviceCallOwner.label} readOnly />
+                  <Form.Text className="text-muted">
+                    Service call {selectedServiceCall.value} belongs to this customer.
+                    The job stays under {selectedCustomer.label}.
+                  </Form.Text>
+                </Form.Group>
+              </Row>
+            )}
+
             <hr className="my-4" />
             <h5 className="mb-1">Primary Contact</h5>
             <p className="text-muted">Details about the customer.</p>
@@ -4975,21 +5057,18 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
                     disabled={isFormDisabled}
                   />
                 ) : (
-                  <Select
-                    instanceId="service-call-select"
-                    options={serviceCalls}
+                  <ServiceCallSearchInput
                     value={selectedServiceCall}
-                    onChange={handleSelectedServiceCallChange}
-                    placeholder={selectedCustomer ? "Select Service Call" : "Select Customer first"}
-                    isDisabled={isFormDisabled || !selectedCustomer}
-                    isClearable
-                    isLoading={Boolean(selectedCustomer) && !customerRelatedDataLoaded}
-                    noOptionsMessage={() =>
+                    customerServiceCalls={serviceCalls}
+                    customerCardCodes={selectedCustomerCardCodes}
+                    searchAllCustomers={customerSource === "sap"}
+                    onSelect={handleSelectedServiceCallChange}
+                    disabled={isFormDisabled || !selectedCustomer}
+                    loading={Boolean(selectedCustomer) && !customerRelatedDataLoaded}
+                    placeholder={
                       selectedCustomer
-                        ? customerRelatedDataLoaded
-                          ? "No service calls found for this customer"
-                          : "Loading service calls..."
-                        : "Please select a customer first"
+                        ? "Type to search service calls..."
+                        : "Select Customer first"
                     }
                   />
                 )}
