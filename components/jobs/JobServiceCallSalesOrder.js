@@ -11,11 +11,16 @@ function displayValue(value) {
 export default function JobServiceCallSalesOrder({
   serviceCallNumber,
   salesOrderNumber,
+  serviceCallOwner,
   variant = "scheduler",
   className,
 }) {
   const items = [
     { label: "Service Call", value: displayValue(serviceCallNumber) },
+    // Only shown when the call belongs to another customer than the job's.
+    ...(serviceCallOwner
+      ? [{ label: "Service Call Owner", value: displayValue(serviceCallOwner) }]
+      : []),
     { label: "Sales Order", value: displayValue(salesOrderNumber) },
   ];
 

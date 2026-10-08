@@ -5565,6 +5565,7 @@ const JobDetails = () => {
                     </h1>
                     <JobServiceCallSalesOrder
                       serviceCallNumber={job.serviceCallNumber}
+                      serviceCallOwner={job.serviceCallOwner}
                       salesOrderNumber={job.salesOrderNumber}
                       variant="header"
                     />
