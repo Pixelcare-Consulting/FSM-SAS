@@ -82,6 +82,7 @@ import {
   invalidateJobsListServerCache,
   clearJobsListSessionCache,
 } from '../../../hooks/queries/useJobsListQuery';
+import { useSyncPickerSearch } from '../../../hooks/useSyncPickerSearch';
 import { queryKeys } from '../../../lib/cache/queryKeys';
 import {
   getDefaultJobsDateRange,
@@ -128,6 +129,19 @@ function getSyncDatePresetRange(preset) {
     return { dateFrom: formatDateYmd(start), dateTo: formatDateYmd(today) };
   }
   return { dateFrom: null, dateTo: null };
+}
+
+/** Empty-state text for a Sync-to-SAP picker list while searching, on error, or with no match. */
+function syncPickerEmptyText(pickerSearch, noMatchText) {
+  if (pickerSearch.loading) return 'Searching…';
+  if (pickerSearch.error) return pickerSearch.error;
+  return noMatchText;
+}
+
+/** "Showing N of M" note when a picker list (searched or not) hit the server limit. */
+function syncPickerSearchTruncatedNote(pickerSearch) {
+  if (pickerSearch.jobs == null || !pickerSearch.truncated) return null;
+  return `Showing the newest ${pickerSearch.jobs.length.toLocaleString()} of ${pickerSearch.total.toLocaleString()} matches. Add more words to narrow the search.`;
 }
 
 function formatSyncFilterLabel(dateFrom, dateTo) {
@@ -402,6 +416,9 @@ const ViewJobs = () => {
     syncedJobsListTruncated: false,
     unsyncedJobsList: [],
     unsyncedJobsListTruncated: false,
+    // Range the preview was loaded for (not the unapplied custom inputs).
+    appliedDateFrom: null,
+    appliedDateTo: null,
     error: null,
   });
   // Unsynced jobs the user unticked. Tracked as exclusions so everything is
@@ -1906,13 +1923,21 @@ const ViewJobs = () => {
         syncedJobsListTruncated: data.syncedJobsListTruncated === true,
         unsyncedJobsList: Array.isArray(data.unsyncedJobsList) ? data.unsyncedJobsList : [],
         unsyncedJobsListTruncated: data.unsyncedJobsListTruncated === true,
+        appliedDateFrom: dateFrom || null,
+        appliedDateTo: dateTo || null,
         error: null,
       }));
-      // Drop ticks / unticks for jobs no longer in the range.
-      const listedIds = new Set((data.syncedJobsList || []).map((j) => j.id));
-      setSelectedSyncedJobIds((prev) => prev.filter((id) => listedIds.has(id)));
-      const listedUnsyncedIds = new Set((data.unsyncedJobsList || []).map((j) => j.id));
-      setExcludedUnsyncedJobIds((prev) => prev.filter((id) => listedUnsyncedIds.has(id)));
+      // Drop ticks / unticks for jobs no longer in the range. Only when the list
+      // is complete: a truncated list omits in-range jobs ticked via search, and
+      // the server re-applies the range to selected ids anyway.
+      if (data.syncedJobsListTruncated !== true) {
+        const listedIds = new Set((data.syncedJobsList || []).map((j) => j.id));
+        setSelectedSyncedJobIds((prev) => prev.filter((id) => listedIds.has(id)));
+      }
+      if (data.unsyncedJobsListTruncated !== true) {
+        const listedUnsyncedIds = new Set((data.unsyncedJobsList || []).map((j) => j.id));
+        setExcludedUnsyncedJobIds((prev) => prev.filter((id) => listedUnsyncedIds.has(id)));
+      }
     } catch (e) {
       setSyncSapConfirm((prev) => ({
         ...prev,
@@ -1943,6 +1968,8 @@ const ViewJobs = () => {
       syncedJobsListTruncated: false,
       unsyncedJobsList: [],
       unsyncedJobsListTruncated: false,
+      appliedDateFrom: null,
+      appliedDateTo: null,
       error: null,
     });
     fetchSyncPreview(null, null, false);
@@ -2145,14 +2172,30 @@ const ViewJobs = () => {
   const jobSyncStartCount =
     unsyncedToSyncCount + (syncIncludeSynced ? selectedSyncedJobIds.length : 0);
 
-  const filteredUnsyncedJobs = useMemo(() => {
-    const list = syncSapConfirm.unsyncedJobsList || [];
-    const q = unsyncedJobSearch.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((j) =>
-      [j.job_number, j.customer_name, j.title].some((v) => String(v ?? '').toLowerCase().includes(q))
-    );
-  }, [syncSapConfirm.unsyncedJobsList, unsyncedJobSearch]);
+  const syncPickerRange = {
+    dateFrom: syncSapConfirm.appliedDateFrom,
+    dateTo: syncSapConfirm.appliedDateTo,
+  };
+  const unsyncedPickerSearch = useSyncPickerSearch({
+    list: 'unsynced',
+    search: unsyncedJobSearch,
+    ...syncPickerRange,
+    enabled: syncSapConfirm.show,
+  });
+  const syncedPickerSearch = useSyncPickerSearch({
+    list: 'synced',
+    search: syncedJobSearch,
+    ...syncPickerRange,
+    enabled:
+      syncSapConfirm.show &&
+      syncIncludeSynced &&
+      Boolean(syncPickerRange.dateFrom || syncPickerRange.dateTo),
+  });
+
+  const unsyncedSearchNote = syncPickerSearchTruncatedNote(unsyncedPickerSearch);
+  const syncedSearchNote = syncPickerSearchTruncatedNote(syncedPickerSearch);
+
+  const filteredUnsyncedJobs = unsyncedPickerSearch.jobs ?? syncSapConfirm.unsyncedJobsList ?? [];
 
   const toggleUnsyncedJob = (id, checked) => {
     setExcludedUnsyncedJobIds((prev) =>
@@ -2170,14 +2213,7 @@ const ViewJobs = () => {
     );
   };
 
-  const filteredSyncedJobs = useMemo(() => {
-    const list = syncSapConfirm.syncedJobsList || [];
-    const q = syncedJobSearch.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((j) =>
-      [j.job_number, j.customer_name, j.title].some((v) => String(v ?? '').toLowerCase().includes(q))
-    );
-  }, [syncSapConfirm.syncedJobsList, syncedJobSearch]);
+  const filteredSyncedJobs = syncedPickerSearch.jobs ?? syncSapConfirm.syncedJobsList ?? [];
 
   const toggleSyncedJob = (id, checked) => {
     setSelectedSyncedJobIds((prev) =>
@@ -2782,7 +2818,9 @@ const ViewJobs = () => {
                       </div>
                       <div className="border rounded bg-white" style={{ maxHeight: 260, overflowY: 'auto' }}>
                         {filteredSyncedJobs.length === 0 ? (
-                          <div className="text-muted small p-3 text-center">No jobs already in SAP match.</div>
+                          <div className="text-muted small p-3 text-center">
+                            {syncPickerEmptyText(syncedPickerSearch, 'No jobs already in SAP match.')}
+                          </div>
                         ) : (
                           filteredSyncedJobs.map((j) => (
                             <label
@@ -2811,10 +2849,13 @@ const ViewJobs = () => {
                           ))
                         )}
                       </div>
-                      {syncSapConfirm.syncedJobsListTruncated && (
+                      {syncedPickerSearch.jobs != null ? (
+                        syncedSearchNote && <div className="text-muted small mt-1">{syncedSearchNote}</div>
+                      ) : syncSapConfirm.syncedJobsListTruncated && (
                         <div className="text-muted small mt-1">
                           Showing the newest {(syncSapConfirm.syncedJobsList || []).length.toLocaleString()} of{' '}
-                          {(syncSapConfirm.syncedInRange ?? 0).toLocaleString()}. Narrow the date range to see more.
+                          {(syncSapConfirm.syncedInRange ?? 0).toLocaleString()}. Search by job no. or customer, or
+                          narrow the date range, to find older jobs.
                         </div>
                       )}
                     </div>
@@ -2851,7 +2892,9 @@ const ViewJobs = () => {
                   </div>
                   <div className="border rounded bg-white" style={{ maxHeight: 260, overflowY: 'auto' }}>
                     {filteredUnsyncedJobs.length === 0 ? (
-                      <div className="text-muted small p-3 text-center">No unsynced jobs match.</div>
+                      <div className="text-muted small p-3 text-center">
+                        {syncPickerEmptyText(unsyncedPickerSearch, 'No unsynced jobs match.')}
+                      </div>
                     ) : (
                       filteredUnsyncedJobs.map((j) => (
                         <label
@@ -2878,7 +2921,9 @@ const ViewJobs = () => {
                       ))
                     )}
                   </div>
-                  {syncSapConfirm.unsyncedJobsListTruncated && (
+                  {unsyncedPickerSearch.jobs != null ? (
+                    unsyncedSearchNote && <div className="text-muted small mt-1">{unsyncedSearchNote}</div>
+                  ) : syncSapConfirm.unsyncedJobsListTruncated && (
                     <div className="text-muted small mt-1">
                       Showing the newest {(syncSapConfirm.unsyncedJobsList || []).length.toLocaleString()} of{' '}
                       {syncSapConfirm.unsyncedJobs.toLocaleString()}. Jobs not shown will still sync; narrow the date

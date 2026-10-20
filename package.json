@@ -21,6 +21,7 @@
     "test:sap-job-incentive": "node tests/sapJobIncentivePush.test.mjs",
     "test:sap-session-retry": "node tests/sapSessionRetry.test.mjs",
     "test:sync-jobs-batch": "node tests/syncJobsBatch.test.mjs",
+    "test:sync-jobs-picker-search": "node tests/syncJobsPickerSearch.test.mjs",
     "test:job-list-search": "node tests/jobListSearch.test.mjs",
     "test:location-active-filter": "node tests/filterActiveLocationOptions.test.mjs",
     "test:manual": "echo 'See tests/manual-test-checklist.md for manual testing steps'",

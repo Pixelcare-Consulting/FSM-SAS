@@ -8,6 +8,7 @@
  *   { includeSynced: true, syncedJobIds: [...] } — only update the listed already-in-SAP jobs
  *   { excludedUnsyncedJobIds: [...] } — skip these unsynced jobs (unticked in the picker)
  *   { preview: true } — also returns unsyncedJobsList (+ syncedJobsList when includeSynced) for the pickers
+ *   { picker: 'synced' | 'unsynced', search, dateFrom, dateTo } — one picker list, search applied server-side
  *   { limit?: number } — capped batch (cron/scripts)
  *
  * Requires SAP session cookies (except preview-only without SAP — preview doesn't need SAP).
@@ -17,13 +18,17 @@ import { getSupabaseAdmin } from '../../../lib/supabase/server';
 import sapService from '../../../lib/services/sapService';
 import {
   countJobs,
+  fetchJobsForPicker,
   fetchJobsForSapSync,
   getIncludeSyncedDateRangeError,
   getSyncPreview,
+  hasDateRange,
   parseDateFilter,
   parseExcludedUnsyncedJobIds,
   parseIncludeSynced,
+  parsePickerRequest,
   parseSyncedJobIds,
+  PICKER_LISTS,
   resolveBatchLimit,
   runBatchSync,
   SYNC_CONCURRENCY,
@@ -113,6 +118,32 @@ export default async function handler(req, res) {
     supabase = getSupabaseAdmin();
   } catch (e) {
     return res.status(500).json({ success: false, error: 'Database not configured' });
+  }
+
+  let pickerRequest;
+  try {
+    pickerRequest = parsePickerRequest(body);
+  } catch (e) {
+    return res.status(400).json({ success: false, error: e.message });
+  }
+
+  if (pickerRequest) {
+    const synced = pickerRequest.list === PICKER_LISTS.SYNCED;
+    if (synced && !hasDateRange(dateFilter)) {
+      return res.status(400).json({
+        success: false,
+        error: getIncludeSyncedDateRangeError(true, dateFilter),
+      });
+    }
+    try {
+      const picker = await fetchJobsForPicker(supabase, dateFilter, {
+        synced,
+        search: pickerRequest.search,
+      });
+      return res.status(200).json({ success: true, list: pickerRequest.list, ...picker });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e?.message || 'Job search failed' });
+    }
   }
 
   if (body.preview === true) {
