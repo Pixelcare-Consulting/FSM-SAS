@@ -323,7 +323,8 @@ export default async function handler(req, res) {
     }
 
     // Fetch job images if available (with created_by user info)
-    // Exclude soft-deleted images
+    // Exclude soft-deleted images. Oldest first so the jobsheet follows the technician's
+    // upload sequence; id breaks ties so batch inserts with identical timestamps stay stable.
     const { data: jobImages } = await admin
       .from('job_media')
       .select(`
@@ -331,7 +332,9 @@ export default async function handler(req, res) {
         created_by_user:created_by(id, username)
       `)
       .eq('job_id', jobId)
-      .is('deleted_at', null);
+      .is('deleted_at', null)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
     
     // Enrich job images with full_name from technicians
     if (jobImages && jobImages.length > 0) {
