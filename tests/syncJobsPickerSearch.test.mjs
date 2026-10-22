@@ -34,7 +34,7 @@ const jobRow = (id, job_number) => ({
   id,
   job_number,
   title: 'Repair',
-  created_at: '2026-09-01T00:52:27Z',
+  scheduled_start: '2026-09-01T00:52:27Z',
   last_synced_at: null,
   customer: { customer_name: 'SIM FREDDY' },
 });

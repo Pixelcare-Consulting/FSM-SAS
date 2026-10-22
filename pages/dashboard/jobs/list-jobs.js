@@ -146,10 +146,10 @@ function syncPickerSearchTruncatedNote(pickerSearch) {
 
 function formatSyncFilterLabel(dateFrom, dateTo) {
   if (!dateFrom && !dateTo) return 'All unsynced jobs (no date filter)';
-  if (dateFrom && dateTo && dateFrom === dateTo) return `Created on ${dateFrom}`;
-  if (dateFrom && dateTo) return `Created ${dateFrom} → ${dateTo}`;
-  if (dateFrom) return `Created from ${dateFrom}`;
-  return `Created until ${dateTo}`;
+  if (dateFrom && dateTo && dateFrom === dateTo) return `Starting on ${dateFrom}`;
+  if (dateFrom && dateTo) return `Starting ${dateFrom} → ${dateTo}`;
+  if (dateFrom) return `Starting from ${dateFrom}`;
+  return `Starting until ${dateTo}`;
 }
 
 const SYNC_DATE_PRESETS = [
@@ -2687,7 +2687,7 @@ const ViewJobs = () => {
               Sync jobs to SAP
             </Modal.Title>
             <p className="text-muted small mb-0 mt-1">
-              Choose which jobs to send — filter by created date before proceeding.
+              Choose which jobs to send — filter by job start date before proceeding.
             </p>
           </div>
         </Modal.Header>
@@ -2915,7 +2915,7 @@ const ViewJobs = () => {
                             {j.title ? <div className="text-muted text-truncate">{j.title}</div> : null}
                           </div>
                           <span className="text-muted text-nowrap" style={{ fontSize: 11 }}>
-                            {j.created_at ? `Created ${new Date(j.created_at).toLocaleDateString()}` : ''}
+                            {j.scheduled_start ? `Starts ${formatSingaporeDate(j.scheduled_start)}` : 'No start date'}
                           </span>
                         </label>
                       ))
