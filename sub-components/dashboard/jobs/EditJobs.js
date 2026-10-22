@@ -773,6 +773,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
   const workersHydratedRef = useRef(false);
   const workerQueryPrefillHandledRef = useRef(false);
   const pendingJobContactTypeRef = useRef(null);
+  const jobContactTypeDefaultedRef = useRef(false);
   const initialCustomerAppliedRef = useRef(false);
   const customerChangeInFlightRef = useRef(false);
   const fetchSalesOrdersForServiceCallRef = useRef(null);
@@ -1576,8 +1577,11 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
   }, [jobContactTypes, selectedJobContactType]);
 
   // Jobs with no saved contact type (e.g. legacy portal-generated): default to Service.
+  // Runs once on load only, so it never overrides what the user picks afterwards.
   useEffect(() => {
-    if (!jobDataLoaded || selectedJobContactType || jobContactTypes.length === 0) return;
+    if (!jobDataLoaded || jobContactTypes.length === 0 || jobContactTypeDefaultedRef.current) return;
+    jobContactTypeDefaultedRef.current = true;
+    if (selectedJobContactType) return;
     const serviceOption = findServiceJobContactTypeOption(jobContactTypes);
     if (!serviceOption) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- default missing contact type to Service
@@ -4190,12 +4194,15 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
       setProgress(85);
 
       // 5. Update job_contact_type
-      await supabase
+      const { error: contactTypeDeleteError } = await supabase
         .from('job_contact_type')
         .delete()
         .eq('job_id', jobIdProp);
 
-      if (selectedJobContactType) {
+      if (contactTypeDeleteError) {
+        console.error('Error clearing job contact type:', contactTypeDeleteError);
+        toast.error(`Failed to save job contact type: ${contactTypeDeleteError.message}`);
+      } else if (selectedJobContactType) {
         const contactTypeCode = selectedJobContactType.code || selectedJobContactType.value;
         const codeAsInt = contactTypeCode ? parseInt(contactTypeCode, 10) : null;
         const contactTypeName = selectedJobContactType.name || selectedJobContactType.label || '';
@@ -4210,6 +4217,7 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
 
         if (contactTypeError) {
           console.error('Error updating job contact type:', contactTypeError);
+          toast.error(`Failed to save job contact type: ${contactTypeError.message}`);
         }
       }
 
@@ -5132,7 +5140,6 @@ const EditJobs = ({ initialJobData, jobId: jobIdProp }) => {
                   value={selectedJobContactType}
                   onChange={handleJobContactTypeChange}
                   placeholder="Select Contact Type"
-                  isClearable
                   isDisabled={isFormDisabled}
                   noOptionsMessage={() => 
                     jobContactTypes.length === 0 

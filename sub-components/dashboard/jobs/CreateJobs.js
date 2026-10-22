@@ -4906,7 +4906,6 @@ const AddNewJobs = ({ validateJobForm }) => {
                   value={selectedJobContactType}
                   onChange={handleJobContactTypeChange}
                   placeholder="Select Contact Type"
-                  isClearable
                   noOptionsMessage={() => 
                     jobContactTypes.length === 0 
                       ? "No contact types available" 
