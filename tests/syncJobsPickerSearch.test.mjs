@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 
-import { fetchJobsForPicker, parsePickerRequest, PICKER_LISTS } from '../lib/jobs/syncJobsQuery.js';
+import {
+  fetchJobsForPicker,
+  parseDateFilter,
+  parsePickerRequest,
+  PICKER_LISTS,
+} from '../lib/jobs/syncJobsQuery.js';
+import { SYNC_DATE_FIELDS } from '../lib/jobs/syncDateFields.js';
 
 /** Records every filter call; resolves with the table's canned result. */
 function createMockSupabase({ customers = [], jobs = [], jobsCount = jobs.length } = {}) {
@@ -51,14 +57,17 @@ const jobRow = (id, job_number) => ({
     { synced: true, search: '2026-009572' }
   );
 
-  assert.deepEqual(orArgs(supabase.calls.jobs), [
+  assert.deepEqual(orArgs(supabase.calls.jobs).filter((c) => c.startsWith('job_number.')), [
     'job_number.ilike.%2026-009572%,title.ilike.%2026-009572%,customer_id.in.(cust-1,cust-2)',
   ]);
   assert.ok(
     supabase.calls.jobs.some(([m, col]) => m === 'not' && col === 'sap_activity_id'),
     'synced list keeps the sap_activity_id filter'
   );
-  assert.ok(supabase.calls.jobs.some(([m]) => m === 'gte'), 'date range still applied');
+  assert.ok(
+    supabase.calls.jobs.some(([m, col]) => m === 'lte' && col === 'scheduled_start'),
+    'date range still applied'
+  );
   assert.deepEqual(result.jobs.map((j) => j.job_number), ['2026-009572']);
   assert.equal(result.jobs[0].customer_name, 'SIM FREDDY');
   assert.equal(result.truncated, false);
@@ -103,5 +112,39 @@ assert.deepEqual(parsePickerRequest({ picker: 'synced', search: 'abc' }), {
 });
 assert.equal(parsePickerRequest({ picker: 'unsynced', search: 'x'.repeat(500) }).search.length, 100);
 assert.throws(() => parsePickerRequest({ picker: 'all' }), /picker must be/);
+
+// Date range follows dateField: scheduled start/end by default, created date when picked.
+{
+  const range = { dateFrom: '2026-10-01', dateTo: '2026-10-07' };
+  const columnsFor = async (dateFilter) => {
+    const supabase = createMockSupabase();
+    await fetchJobsForPicker(supabase, dateFilter, { synced: false });
+    return supabase.calls.jobs
+      .filter(([m, col]) => ['gte', 'lte', 'order'].includes(m) || (m === 'not' && col !== 'sap_activity_id'))
+      .map(([m, col]) => `${m}:${col}`);
+  };
+
+  const byDefault = parseDateFilter(range);
+  assert.equal(byDefault.dateField, SYNC_DATE_FIELDS.SCHEDULED);
+  assert.deepEqual(await columnsFor(byDefault), [
+    'not:scheduled_start',
+    'lte:scheduled_start',
+    'order:scheduled_start',
+  ]);
+  const supabase = createMockSupabase();
+  await fetchJobsForPicker(supabase, byDefault, { synced: false });
+  const from = byDefault.dateFrom;
+  assert.deepEqual(
+    orArgs(supabase.calls.jobs),
+    [`scheduled_end.gte.${from},and(scheduled_end.is.null,scheduled_start.gte.${from})`],
+    'overlap: starts by To and ends on/after From; no end date falls back to start'
+  );
+
+  const byCreated = parseDateFilter({ ...range, dateField: 'created_at' });
+  assert.equal(byCreated.dateField, SYNC_DATE_FIELDS.CREATED_AT, 'dateField is case-insensitive');
+  assert.deepEqual(await columnsFor(byCreated), ['gte:created_at', 'lte:created_at', 'order:created_at']);
+
+  assert.throws(() => parseDateFilter({ ...range, dateField: 'deleted_at' }), /dateField must be one of/);
+}
 
 console.log('syncJobsPickerSearch tests passed');

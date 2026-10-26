@@ -23,6 +23,7 @@ import {
   ProgressBar,
   Alert,
   Accordion,
+  ButtonGroup,
 } from "react-bootstrap";
 import { useRouter } from "next/router";
 import {
@@ -83,6 +84,11 @@ import {
   clearJobsListSessionCache,
 } from '../../../hooks/queries/useJobsListQuery';
 import { useSyncPickerSearch } from '../../../hooks/useSyncPickerSearch';
+import {
+  DEFAULT_SYNC_DATE_FIELD,
+  SYNC_DATE_FIELD_LABELS,
+  SYNC_DATE_FIELDS,
+} from '../../../lib/jobs/syncDateFields';
 import { queryKeys } from '../../../lib/cache/queryKeys';
 import {
   getDefaultJobsDateRange,
@@ -144,12 +150,26 @@ function syncPickerSearchTruncatedNote(pickerSearch) {
   return `Showing the newest ${pickerSearch.jobs.length.toLocaleString()} of ${pickerSearch.total.toLocaleString()} matches. Add more words to narrow the search.`;
 }
 
-function formatSyncFilterLabel(dateFrom, dateTo) {
+const SYNC_DATE_FIELD_VERBS = {
+  [SYNC_DATE_FIELDS.SCHEDULED]: 'Scheduled',
+  [SYNC_DATE_FIELDS.CREATED_AT]: 'Created',
+};
+
+function formatSyncFilterLabel({ dateFrom, dateTo, dateField }) {
   if (!dateFrom && !dateTo) return 'All unsynced jobs (no date filter)';
-  if (dateFrom && dateTo && dateFrom === dateTo) return `Starting on ${dateFrom}`;
-  if (dateFrom && dateTo) return `Starting ${dateFrom} → ${dateTo}`;
-  if (dateFrom) return `Starting from ${dateFrom}`;
-  return `Starting until ${dateTo}`;
+  const verb = SYNC_DATE_FIELD_VERBS[dateField] ?? SYNC_DATE_FIELD_VERBS[DEFAULT_SYNC_DATE_FIELD];
+  if (dateFrom && dateTo && dateFrom === dateTo) return `${verb} on ${dateFrom}`;
+  if (dateFrom && dateTo) return `${verb} ${dateFrom} → ${dateTo}`;
+  if (dateFrom) return `${verb} from ${dateFrom}`;
+  return `${verb} until ${dateTo}`;
+}
+
+/** Picker row date, matching the field the range is filtered on. */
+function formatSyncPickerJobDate(job, dateField) {
+  if (dateField === SYNC_DATE_FIELDS.CREATED_AT) {
+    return job.created_at ? `Created ${formatSingaporeDate(job.created_at)}` : '';
+  }
+  return job.scheduled_start ? `Starts ${formatSingaporeDate(job.scheduled_start)}` : 'No start date';
 }
 
 const SYNC_DATE_PRESETS = [
@@ -433,6 +453,7 @@ const ViewJobs = () => {
     preset: 'all',
     dateFrom: null,
     dateTo: null,
+    dateField: DEFAULT_SYNC_DATE_FIELD,
   });
   const [syncIncludeSynced, setSyncIncludeSynced] = useState(false);
   const [syncResultModal, setSyncResultModal] = useState({
@@ -1891,10 +1912,10 @@ const ViewJobs = () => {
     getJobStatusColorFromList(status, jobStatuses) ?? "var(--bs-secondary)";
 
 
-  const fetchSyncPreview = useCallback(async (dateFrom, dateTo, includeSynced = false) => {
+  const fetchSyncPreview = useCallback(async ({ dateFrom, dateTo, dateField }, includeSynced = false) => {
     setSyncSapConfirm((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      const payload = { preview: true };
+      const payload = { preview: true, dateField };
       if (dateFrom) payload.dateFrom = dateFrom;
       if (dateTo) payload.dateTo = dateTo;
       if (includeSynced) payload.includeSynced = true;
@@ -1925,6 +1946,7 @@ const ViewJobs = () => {
         unsyncedJobsListTruncated: data.unsyncedJobsListTruncated === true,
         appliedDateFrom: dateFrom || null,
         appliedDateTo: dateTo || null,
+        appliedDateField: dateField,
         error: null,
       }));
       // Drop ticks / unticks for jobs no longer in the range. Only when the list
@@ -1953,7 +1975,7 @@ const ViewJobs = () => {
     setSyncedJobSearch('');
     setExcludedUnsyncedJobIds([]);
     setUnsyncedJobSearch('');
-    setSyncDateFilter({ preset: 'all', dateFrom: null, dateTo: null });
+    setSyncDateFilter({ preset: 'all', dateFrom: null, dateTo: null, dateField: DEFAULT_SYNC_DATE_FIELD });
     setSyncSapConfirm({
       show: true,
       loading: true,
@@ -1970,9 +1992,10 @@ const ViewJobs = () => {
       unsyncedJobsListTruncated: false,
       appliedDateFrom: null,
       appliedDateTo: null,
+      appliedDateField: DEFAULT_SYNC_DATE_FIELD,
       error: null,
     });
-    fetchSyncPreview(null, null, false);
+    fetchSyncPreview({ dateFrom: null, dateTo: null, dateField: DEFAULT_SYNC_DATE_FIELD }, false);
   };
 
   const applySyncDatePreset = (presetId) => {
@@ -1983,19 +2006,28 @@ const ViewJobs = () => {
     const range = getSyncDatePresetRange(presetId);
     const nextIncludeSynced = presetId === 'all' ? false : syncIncludeSynced;
     if (presetId === 'all') setSyncIncludeSynced(false);
-    setSyncDateFilter({ preset: presetId, ...range });
-    fetchSyncPreview(range.dateFrom, range.dateTo, nextIncludeSynced);
+    const next = { preset: presetId, dateField: syncDateFilter.dateField, ...range };
+    setSyncDateFilter(next);
+    fetchSyncPreview(next, nextIncludeSynced);
   };
 
   const applyCustomSyncDateFilter = () => {
-    fetchSyncPreview(syncDateFilter.dateFrom, syncDateFilter.dateTo, syncIncludeSynced);
+    fetchSyncPreview(syncDateFilter, syncIncludeSynced);
+  };
+
+  // Re-preview right away for presets; a custom range waits for Apply, as with date edits.
+  const applySyncDateField = (dateField) => {
+    if (dateField === syncDateFilter.dateField) return;
+    const next = { ...syncDateFilter, dateField };
+    setSyncDateFilter(next);
+    if (next.preset !== 'custom') fetchSyncPreview(next, syncIncludeSynced);
   };
 
   const handleIncludeSyncedChange = (checked) => {
     const hasRange = Boolean(syncDateFilter.dateFrom || syncDateFilter.dateTo);
     if (checked && !hasRange) return;
     setSyncIncludeSynced(checked);
-    fetchSyncPreview(syncDateFilter.dateFrom, syncDateFilter.dateTo, checked);
+    fetchSyncPreview(syncDateFilter, checked);
   };
 
   const runSyncToSap = async () => {
@@ -2008,7 +2040,7 @@ const ViewJobs = () => {
     setSyncToSapProgress(null);
     setSyncLiveFeed([]);
     try {
-      const syncPayload = { stream: true, syncAll: true };
+      const syncPayload = { stream: true, syncAll: true, dateField: syncDateFilter.dateField };
       if (syncDateFilter.dateFrom) syncPayload.dateFrom = syncDateFilter.dateFrom;
       if (syncDateFilter.dateTo) syncPayload.dateTo = syncDateFilter.dateTo;
       if (excludedUnsyncedJobIds.length) syncPayload.excludedUnsyncedJobIds = excludedUnsyncedJobIds;
@@ -2175,6 +2207,7 @@ const ViewJobs = () => {
   const syncPickerRange = {
     dateFrom: syncSapConfirm.appliedDateFrom,
     dateTo: syncSapConfirm.appliedDateTo,
+    dateField: syncSapConfirm.appliedDateField,
   };
   const unsyncedPickerSearch = useSyncPickerSearch({
     list: 'unsynced',
@@ -2687,7 +2720,7 @@ const ViewJobs = () => {
               Sync jobs to SAP
             </Modal.Title>
             <p className="text-muted small mb-0 mt-1">
-              Choose which jobs to send — filter by job start date before proceeding.
+              Choose which jobs to send. Filter by scheduled start or created date before proceeding.
             </p>
           </div>
         </Modal.Header>
@@ -2706,11 +2739,27 @@ const ViewJobs = () => {
               <div className="mb-3 p-3 rounded border bg-light">
                 <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
                   <span className="fw-semibold small text-uppercase text-muted" style={{ letterSpacing: '0.04em' }}>
-                    Date filter (created)
+                    Date filter
                   </span>
                   <Badge bg="secondary" pill className="fw-normal">
-                    {formatSyncFilterLabel(syncDateFilter.dateFrom, syncDateFilter.dateTo)}
+                    {formatSyncFilterLabel(syncDateFilter)}
                   </Badge>
+                </div>
+                <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+                  <span className="small text-muted">Filter by</span>
+                  <ButtonGroup size="sm" aria-label="Date to filter by">
+                    {Object.values(SYNC_DATE_FIELDS).map((field) => (
+                      <Button
+                        key={field}
+                        variant={syncDateFilter.dateField === field ? 'primary' : 'outline-secondary'}
+                        aria-pressed={syncDateFilter.dateField === field}
+                        onClick={() => applySyncDateField(field)}
+                        disabled={syncSapConfirm.loading}
+                      >
+                        {SYNC_DATE_FIELD_LABELS[field]}
+                      </Button>
+                    ))}
+                  </ButtonGroup>
                 </div>
                 <div className="d-flex flex-wrap gap-2 mb-3">
                   {SYNC_DATE_PRESETS.map((p) => (
@@ -2915,7 +2964,7 @@ const ViewJobs = () => {
                             {j.title ? <div className="text-muted text-truncate">{j.title}</div> : null}
                           </div>
                           <span className="text-muted text-nowrap" style={{ fontSize: 11 }}>
-                            {j.scheduled_start ? `Starts ${formatSingaporeDate(j.scheduled_start)}` : 'No start date'}
+                            {formatSyncPickerJobDate(j, syncSapConfirm.appliedDateField)}
                           </span>
                         </label>
                       ))

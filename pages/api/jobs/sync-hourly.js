@@ -101,7 +101,12 @@ export default async function handler(req, res) {
   }
 
   const body = parseBody(req);
-  const dateFilter = parseDateFilter(body);
+  let dateFilter;
+  try {
+    dateFilter = parseDateFilter(body);
+  } catch (e) {
+    return res.status(400).json({ success: false, error: e.message });
+  }
   const includeSynced = parseIncludeSynced(body);
   const syncedJobIds = includeSynced ? parseSyncedJobIds(body) : null;
   const excludedUnsyncedJobIds = parseExcludedUnsyncedJobIds(body);
@@ -191,6 +196,7 @@ export default async function handler(req, res) {
         syncAll: body?.syncAll === true,
         dateFrom: dateFilter?.dateFrom ?? null,
         dateTo: dateFilter?.dateTo ?? null,
+        dateField: dateFilter.dateField,
       });
       const results = await runBatchSync({ supabase, sessionCookies, jobs, onAudit });
       const remainingUnsynced = await countJobs(supabase, { unsyncedOnly: true, dateFilter });
@@ -206,6 +212,7 @@ export default async function handler(req, res) {
         syncAll: body?.syncAll === true,
         dateFrom: dateFilter?.dateFrom ?? null,
         dateTo: dateFilter?.dateTo ?? null,
+        dateField: dateFilter.dateField,
       });
 
       return res.status(200).json({
@@ -368,6 +375,7 @@ export default async function handler(req, res) {
       includeSynced,
       dateFrom: dateFilter?.dateFrom ?? null,
       dateTo: dateFilter?.dateTo ?? null,
+      dateField: dateFilter.dateField,
     });
     send({ type: 'error', error: e?.message || 'Sync failed' });
   }

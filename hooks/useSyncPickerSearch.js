@@ -9,12 +9,12 @@ const IDLE = Object.freeze({ loading: false, jobs: null, total: 0, truncated: fa
  * jobs in range could never be found. `jobs` stays null while the search box
  * is empty, so the caller falls back to the preview list.
  */
-export function useSyncPickerSearch({ list, search, dateFrom, dateTo, enabled }) {
+export function useSyncPickerSearch({ list, search, dateFrom, dateTo, dateField, enabled }) {
   const term = String(search ?? '').trim();
   const active = Boolean(enabled && term);
   // Identifies the request a stored result belongs to, so a stale result is
   // never shown for the current search / range.
-  const requestKey = active ? JSON.stringify([list, term, dateFrom ?? null, dateTo ?? null]) : null;
+  const requestKey = active ? JSON.stringify([list, term, dateFrom ?? null, dateTo ?? null, dateField ?? null]) : null;
   const [result, setResult] = useState({ key: null, ...IDLE });
 
   useEffect(() => {
@@ -26,6 +26,7 @@ export function useSyncPickerSearch({ list, search, dateFrom, dateTo, enabled })
         const payload = { picker: list, search: term };
         if (dateFrom) payload.dateFrom = dateFrom;
         if (dateTo) payload.dateTo = dateTo;
+        if (dateField) payload.dateField = dateField;
 
         const res = await fetch('/api/jobs/sync-hourly', {
           method: 'POST',
@@ -55,7 +56,7 @@ export function useSyncPickerSearch({ list, search, dateFrom, dateTo, enabled })
       clearTimeout(timer);
       controller.abort();
     };
-  }, [requestKey, list, term, dateFrom, dateTo]);
+  }, [requestKey, list, term, dateFrom, dateTo, dateField]);
 
   if (!active) return IDLE;
   if (result.key !== requestKey) return { ...IDLE, jobs: [], loading: true };
