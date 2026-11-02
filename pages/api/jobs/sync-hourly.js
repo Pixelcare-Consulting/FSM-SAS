@@ -9,6 +9,10 @@
  *   { excludedUnsyncedJobIds: [...] } — skip these unsynced jobs (unticked in the picker)
  *   { preview: true } — also returns unsyncedJobsList (+ syncedJobsList when includeSynced) for the pickers
  *   { picker: 'synced' | 'unsynced', search, dateFrom, dateTo } — one picker list, search applied server-side
+ *   { plan: true, ...same filters as a sync } — ordered { id, job_number } list the sync would process
+ *   { stream: true, jobIds: [...], chunkIndex, chunkCount, dateFrom, dateTo } — SSE sync of one chunk
+ *     (max MAX_SYNC_CHUNK_SIZE ids). The UI plans once, then sends chunks so no request hits the
+ *     function time limit.
  *   { limit?: number } — capped batch (cron/scripts)
  *
  * Requires SAP session cookies (except preview-only without SAP — preview doesn't need SAP).
@@ -18,6 +22,7 @@ import { getSupabaseAdmin } from '../../../lib/supabase/server';
 import sapService from '../../../lib/services/sapService';
 import {
   countJobs,
+  fetchJobRowsByIds,
   fetchJobsForPicker,
   fetchJobsForSapSync,
   getIncludeSyncedDateRangeError,
@@ -26,6 +31,7 @@ import {
   parseDateFilter,
   parseExcludedUnsyncedJobIds,
   parseIncludeSynced,
+  parseJobIds,
   parsePickerRequest,
   parseSyncedJobIds,
   PICKER_LISTS,
@@ -68,6 +74,33 @@ function parseBody(req) {
   }
 }
 
+/** Switch the response to Server-Sent Events; returns a non-throwing `send`. */
+function openEventStream(res) {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+  try {
+    res.socket?.setNoDelay(true);
+  } catch (_) {}
+
+  return (data) => {
+    try {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch (_) {}
+  };
+}
+
+function parseChunkPosition(body) {
+  const index = Number.parseInt(body?.chunkIndex, 10);
+  const count = Number.parseInt(body?.chunkCount, 10);
+  if (!Number.isInteger(index) || !Number.isInteger(count) || index < 0 || count < 1 || index >= count) {
+    return null;
+  }
+  return { index, count };
+}
+
 async function logJobSyncLifecycle(req, phase, extra = {}) {
   const isStart = phase === 'started';
   await writeJobSyncAuditFromRequest(req, {
@@ -80,6 +113,69 @@ async function logJobSyncLifecycle(req, phase, extra = {}) {
     },
     status: extra.error ? AUDIT_STATUS.FAILURE : AUDIT_STATUS.SUCCESS,
   });
+}
+
+/** One client-planned chunk: sync exactly these jobs, then `done` with this chunk's results. */
+async function streamChunkSync({ req, res, send, supabase, sessionCookies, jobIds, dateFilter, body, onAudit }) {
+  const chunk = parseChunkPosition(body);
+  const lifecycle = {
+    stream: true,
+    chunked: true,
+    chunk: chunk ? `${chunk.index + 1}/${chunk.count}` : null,
+    dateFrom: dateFilter?.dateFrom ?? null,
+    dateTo: dateFilter?.dateTo ?? null,
+    dateField: dateFilter.dateField,
+  };
+
+  try {
+    const jobs = await fetchJobRowsByIds(supabase, jobIds, dateFilter);
+    send({
+      type: 'start',
+      processing: jobs.length,
+      toProcess: jobs.length,
+      skipped: jobIds.length - jobs.length,
+      concurrency: SYNC_CONCURRENCY,
+      chunk,
+      message: `Syncing ${jobs.length.toLocaleString()} job(s) to SAP (${SYNC_CONCURRENCY} parallel)…`,
+    });
+
+    await logJobSyncLifecycle(req, 'started', { ...lifecycle, processed: jobs.length, requested: jobIds.length });
+
+    const results = await runBatchSync({
+      supabase,
+      sessionCookies,
+      jobs,
+      onAudit,
+      onProgress: (p) => send({ type: 'progress', ...p }),
+      onLog: (entry) => send({ type: 'log', ts: new Date().toISOString(), ...entry }),
+    });
+
+    const remainingUnsynced = await countJobs(supabase, { unsyncedOnly: true, dateFilter });
+
+    await logJobSyncLifecycle(req, 'completed', {
+      ...lifecycle,
+      synced: results.synced,
+      failed: results.failed,
+      processed: jobs.length,
+      remainingUnsynced,
+    });
+
+    send({
+      type: 'done',
+      success: true,
+      message: `Synced ${results.synced} jobs, ${results.failed} failed`,
+      processed: jobs.length,
+      remainingUnsynced,
+      concurrency: SYNC_CONCURRENCY,
+      chunk,
+      ...results,
+    });
+  } catch (e) {
+    await logJobSyncLifecycle(req, 'completed', { ...lifecycle, error: e?.message || 'Sync failed' });
+    send({ type: 'error', error: e?.message || 'Sync failed' });
+  }
+
+  res.end();
 }
 
 export default async function handler(req, res) {
@@ -126,8 +222,10 @@ export default async function handler(req, res) {
   }
 
   let pickerRequest;
+  let jobIds;
   try {
     pickerRequest = parsePickerRequest(body);
+    jobIds = parseJobIds(body);
   } catch (e) {
     return res.status(400).json({ success: false, error: e.message });
   }
@@ -162,6 +260,25 @@ export default async function handler(req, res) {
       return res.status(200).json(preview);
     } catch (e) {
       return res.status(500).json({ success: false, error: e?.message || 'Preview failed' });
+    }
+  }
+
+  if (body.plan === true) {
+    try {
+      const preview = await getSyncPreview(supabase, dateFilter, { includeSynced, syncedJobIds, excludedUnsyncedJobIds });
+      const jobs = await fetchJobsForSapSync(supabase, preview.toProcess, dateFilter, {
+        includeSynced,
+        syncedJobIds,
+        excludedUnsyncedJobIds,
+      });
+      return res.status(200).json({
+        success: true,
+        jobs: jobs.map(({ id, job_number }) => ({ id, job_number })),
+        total: jobs.length,
+        message: preview.message,
+      });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e?.message || 'Could not plan sync' });
     }
   }
 
@@ -235,20 +352,12 @@ export default async function handler(req, res) {
     }
   }
 
-  const send = (data) => {
-    try {
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
-    } catch (_) {}
-  };
+  const send = openEventStream(res);
 
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-  res.flushHeaders();
-  try {
-    res.socket?.setNoDelay(true);
-  } catch (_) {}
+  if (jobIds) {
+    await streamChunkSync({ req, res, send, supabase, sessionCookies, jobIds, dateFilter, body, onAudit });
+    return;
+  }
 
   try {
     const preview = await getSyncPreview(supabase, dateFilter, { includeSynced, syncedJobIds, excludedUnsyncedJobIds });
@@ -330,6 +439,7 @@ export default async function handler(req, res) {
       stream: true,
       dateFrom: preview.dateFrom,
       dateTo: preview.dateTo,
+      dateField: dateFilter.dateField,
     });
 
     const results = await runBatchSync({
@@ -355,6 +465,7 @@ export default async function handler(req, res) {
       stream: true,
       dateFrom: preview.dateFrom,
       dateTo: preview.dateTo,
+      dateField: dateFilter.dateField,
     });
 
     send({

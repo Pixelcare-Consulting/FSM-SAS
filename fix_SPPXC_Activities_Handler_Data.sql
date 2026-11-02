@@ -23,7 +23,11 @@
 --             the tech list by job number only, so a duplicate SCL5 row on another call blanked it.
 --**********
 
-CREATE OR ALTER PROCEDURE "_SPPXC_Activities_Handler_Data"
+-- Select the database in SSMS before executing. ALTER (not CREATE OR ALTER) so it
+-- runs on SQL Server versions before 2016 SP1; GO keeps it the first statement in its batch.
+GO
+
+ALTER PROCEDURE "_SPPXC_Activities_Handler_Data"
 	@Type NVARCHAR(10),
 	@CallID NVARCHAR(20),
 	@JobNumber NVARCHAR(20),

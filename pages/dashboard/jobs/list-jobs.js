@@ -76,6 +76,7 @@ import Swal from "sweetalert2";
 import ResponsiveTable from "./_components/ResponsiveTable";
 import { jobDisplayCustomerName, parseEmbeddedCustomerName } from '../../../lib/utils/embeddedCustomerName';
 import { uniqueActiveTechnicianJobs } from '../../../lib/jobs/uniqueActiveTechnicianJobs';
+import { chunkArray, readSseEvents, SYNC_CHUNK_SIZE } from '../../../lib/jobs/syncSapChunks';
 import { softDeleteFollowUpsForJobs } from '../../../lib/followUps/followUpListSummary';
 import { useQueryClient } from 'react-query';
 import {
@@ -2030,6 +2031,69 @@ const ViewJobs = () => {
     fetchSyncPreview(syncDateFilter, checked);
   };
 
+  const showSyncResult = ({ errorMessage = null, totals = null, remainingUnsynced = null }) =>
+    setSyncResultModal({
+      show: true,
+      synced: totals?.synced ?? 0,
+      failed: totals?.failed ?? 0,
+      errors: totals?.errors ?? [],
+      errorMessage,
+      totalUnsynced: null,
+      processed: totals?.processed ?? null,
+      remainingUnsynced,
+    });
+
+  /** Sync one planned batch over SSE. Resolves { done } or { error }; never throws for server errors. */
+  const runSyncChunk = async ({ ids, index, count, filter, offset, total, totals }) => {
+    const res = await fetch('/api/jobs/sync-hourly', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stream: true, ...filter, jobIds: ids, chunkIndex: index, chunkCount: count }),
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return {
+        error: data.error || data.message || 'SAP session may be required. Please log in to SAP and try again.',
+      };
+    }
+
+    let done = null;
+    let error = null;
+    await readSseEvents(res, (event) => {
+      if (event.type === 'error') {
+        error = event.error || 'Sync failed';
+      } else if (event.type === 'start') {
+        setSyncToSapProgress((prev) => ({ ...prev, concurrency: event.concurrency ?? prev?.concurrency ?? 2 }));
+      } else if (event.type === 'log') {
+        setSyncLiveFeed((prev) =>
+          [...prev, { id: `${Date.now()}-${Math.random()}`, ...event }].slice(-200)
+        );
+      } else if (event.type === 'progress') {
+        const current = offset + (event.current ?? 0);
+        setSyncToSapProgress((prev) => ({
+          ...prev,
+          current,
+          total,
+          jobNumber: event.job_number ?? null,
+          synced: totals.synced + (event.synced ?? 0),
+          failed: totals.failed + (event.failed ?? 0),
+          message: event.job_number
+            ? `Syncing ${event.job_number} (${current}/${total}, batch ${index + 1} of ${count})…`
+            : `Processing ${current}/${total}…`,
+        }));
+      } else if (event.type === 'done') {
+        done = event;
+      }
+    });
+
+    if (error) return { error };
+    if (!done) return { error: 'No response from server. The request was cut off before it finished.' };
+    return { done };
+  };
+
+  // Plan once, then sync in small batches: one request for the whole range ran
+  // past the 300s function limit (~65 jobs) and was killed mid-run.
   const runSyncToSap = async () => {
     const hasRange = Boolean(syncDateFilter.dateFrom || syncDateFilter.dateTo);
     if (syncIncludeSynced && !hasRange) return;
@@ -2039,154 +2103,87 @@ const ViewJobs = () => {
     setSyncToSapElapsed(0);
     setSyncToSapProgress(null);
     setSyncLiveFeed([]);
+
+    const filter = { dateField: syncDateFilter.dateField };
+    if (syncDateFilter.dateFrom) filter.dateFrom = syncDateFilter.dateFrom;
+    if (syncDateFilter.dateTo) filter.dateTo = syncDateFilter.dateTo;
+    const totals = { synced: 0, failed: 0, errors: [], processed: 0 };
+
     try {
-      const syncPayload = { stream: true, syncAll: true, dateField: syncDateFilter.dateField };
-      if (syncDateFilter.dateFrom) syncPayload.dateFrom = syncDateFilter.dateFrom;
-      if (syncDateFilter.dateTo) syncPayload.dateTo = syncDateFilter.dateTo;
-      if (excludedUnsyncedJobIds.length) syncPayload.excludedUnsyncedJobIds = excludedUnsyncedJobIds;
+      const planPayload = { plan: true, ...filter };
+      if (excludedUnsyncedJobIds.length) planPayload.excludedUnsyncedJobIds = excludedUnsyncedJobIds;
       if (syncIncludeSynced) {
-        syncPayload.includeSynced = true;
-        syncPayload.syncedJobIds = selectedSyncedJobIds;
+        planPayload.includeSynced = true;
+        planPayload.syncedJobIds = selectedSyncedJobIds;
       }
 
-      const res = await fetch('/api/jobs/sync-hourly', {
+      const planRes = await fetch('/api/jobs/sync-hourly', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(syncPayload),
+        body: JSON.stringify(planPayload),
         credentials: 'include',
       });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setSyncResultModal({
-          show: true,
-          synced: 0,
-          failed: 0,
-          errors: [],
-          errorMessage:
-            data.error || data.message || 'SAP session may be required. Please log in to SAP and try again.',
-          totalUnsynced: null,
-          processed: null,
-          remainingUnsynced: null,
-        });
+      const plan = await planRes.json().catch(() => ({}));
+      if (!planRes.ok) {
+        showSyncResult({ errorMessage: plan.error || plan.message || 'Could not prepare the sync. Try again.' });
         return;
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let lastDone = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          let event;
-          try {
-            event = JSON.parse(line.slice(6));
-          } catch {
-            continue;
-          }
-
-          if (event.type === 'error') {
-            setSyncResultModal({
-              show: true,
-              synced: 0,
-              failed: 0,
-              errors: [],
-              errorMessage: event.error || 'Sync failed',
-              totalUnsynced: null,
-              processed: null,
-              remainingUnsynced: null,
-            });
-            return;
-          }
-
-          if (event.type === 'start') {
-            setSyncToSapProgress({
-              current: 0,
-              total: event.processing ?? 0,
-              totalUnsynced: event.totalUnsynced ?? 0,
-              totalJobs: event.totalJobs ?? 0,
-              syncedJobs: event.syncedJobs ?? 0,
-              concurrency: event.concurrency ?? 4,
-              jobNumber: null,
-              synced: 0,
-              failed: 0,
-              message: event.message || 'Starting…',
-            });
-          }
-
-          if (event.type === 'log') {
-            setSyncLiveFeed((prev) =>
-              [...prev, { id: `${Date.now()}-${Math.random()}`, ...event }].slice(-200)
-            );
-          }
-
-          if (event.type === 'progress') {
-            setSyncToSapProgress((prev) => ({
-              current: event.current ?? 0,
-              total: event.total ?? 0,
-              totalUnsynced: prev?.totalUnsynced ?? 0,
-              totalJobs: prev?.totalJobs ?? 0,
-              syncedJobs: prev?.syncedJobs ?? 0,
-              concurrency: prev?.concurrency ?? 4,
-              jobNumber: event.job_number ?? null,
-              synced: event.synced ?? 0,
-              failed: event.failed ?? 0,
-              message: event.job_number
-                ? `Syncing ${event.job_number} (${event.current}/${event.total})…`
-                : `Processing ${event.current}/${event.total}…`,
-            }));
-          }
-
-          if (event.type === 'done') {
-            lastDone = event;
-          }
-        }
+      const jobIds = (Array.isArray(plan.jobs) ? plan.jobs : []).map((j) => j.id);
+      if (!jobIds.length) {
+        showSyncResult({ totals });
+        return;
       }
 
-      if (lastDone) {
-        setSyncResultModal({
-          show: true,
-          synced: lastDone.synced ?? 0,
-          failed: lastDone.failed ?? 0,
-          errors: Array.isArray(lastDone.errors) ? lastDone.errors : [],
-          errorMessage: null,
-          totalUnsynced: lastDone.totalUnsynced ?? null,
-          processed: lastDone.processed ?? null,
-          remainingUnsynced: lastDone.remainingUnsynced ?? null,
-        });
-        if ((lastDone.synced ?? 0) > 0) refreshJobs();
-      } else {
-        setSyncResultModal({
-          show: true,
-          synced: 0,
-          failed: 0,
-          errors: [],
-          errorMessage: 'No response from server. Try again.',
-          totalUnsynced: null,
-          processed: null,
-          remainingUnsynced: null,
-        });
-      }
-    } catch (e) {
-      setSyncResultModal({
-        show: true,
+      const chunks = chunkArray(jobIds, SYNC_CHUNK_SIZE);
+      const total = jobIds.length;
+      setSyncToSapProgress({
+        current: 0,
+        total,
+        concurrency: syncSapConfirm.concurrency ?? 2,
+        jobNumber: null,
         synced: 0,
         failed: 0,
-        errors: [],
-        errorMessage: e?.message || 'Request failed.',
-        totalUnsynced: null,
-        processed: null,
-        remainingUnsynced: null,
+        message: `Syncing ${total.toLocaleString()} job(s) in ${chunks.length} batch(es)…`,
       });
+
+      let offset = 0;
+      let remainingUnsynced = null;
+      for (let index = 0; index < chunks.length; index++) {
+        const outcome = await runSyncChunk({
+          ids: chunks[index],
+          index,
+          count: chunks.length,
+          filter,
+          offset,
+          total,
+          totals,
+        });
+
+        if (outcome.error) {
+          const earlier = index > 0 ? ' Jobs in earlier batches were synced. Run Sync to SAP again for the rest.' : '';
+          showSyncResult({
+            errorMessage: `Stopped at batch ${index + 1} of ${chunks.length}: ${outcome.error}${earlier}`,
+            totals,
+          });
+          if (totals.synced > 0) refreshJobs();
+          return;
+        }
+
+        const { done } = outcome;
+        totals.synced += done.synced ?? 0;
+        totals.failed += done.failed ?? 0;
+        totals.processed += done.processed ?? 0;
+        if (Array.isArray(done.errors)) totals.errors.push(...done.errors);
+        remainingUnsynced = done.remainingUnsynced ?? remainingUnsynced;
+        offset += chunks[index].length;
+      }
+
+      showSyncResult({ totals, remainingUnsynced });
+      if (totals.synced > 0) refreshJobs();
+    } catch (e) {
+      showSyncResult({ errorMessage: e?.message || 'Request failed.', totals: totals.processed ? totals : null });
+      if (totals.synced > 0) refreshJobs();
     } finally {
       setSyncToSapLoading(false);
       setSyncToSapProgress(null);
