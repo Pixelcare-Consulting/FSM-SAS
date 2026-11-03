@@ -1,9 +1,33 @@
 import assert from 'node:assert/strict';
 
 import { fetchJobRowsByIds, MAX_SYNC_CHUNK_SIZE, parseJobIds } from '../lib/jobs/syncJobsQuery.js';
-import { chunkArray, readSseEvents, SYNC_CHUNK_SIZE } from '../lib/jobs/syncSapChunks.js';
+import { chunkOutcome, readSseEvents, SYNC_CHUNK_SIZE } from '../lib/jobs/syncSapChunks.js';
+import { runBatchSync } from '../lib/jobs/syncJobsBatch.js';
+import sapService from '../lib/services/sapService.js';
 
 const uuid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const cookies = { b1session: 's', routeid: 'r' };
+const SAP_STATUSES = { value: [{ U_JobStatusID: '1', U_JobStatus: 'Open' }] };
+
+/** syncJobToSAP's first read is jobs…single(); a null row ends that job as "Job not found". */
+function fakeJobsSupabase(onSingle) {
+  return {
+    from: () => {
+      let jobId;
+      const q = {
+        select: () => q,
+        is: () => q,
+        eq: (col, val) => {
+          if (col === 'id') jobId = val;
+          return q;
+        },
+        single: () => onSingle(jobId),
+      };
+      return q;
+    },
+  };
+}
+const jobNotFound = () => Promise.resolve({ data: null, error: { message: 'Job not found' } });
 
 // parseJobIds: absent = not a chunk request; dedupes; rejects bad input.
 {
@@ -41,10 +65,17 @@ const uuid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
   assert.ok(calls.some(([m, col]) => m === 'is' && col === 'deleted_at'));
 }
 
-// chunkArray splits into fixed-size batches.
+// chunkOutcome: a finished batch (done / error) resends only jobs it never finished;
+// a cut-off stream resends nothing, since the server may still be running them.
 {
-  assert.deepEqual(chunkArray([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
-  assert.deepEqual(chunkArray([], 2), []);
+  const ids = ['a', 'b', 'c'];
+  assert.deepEqual(
+    chunkOutcome({ ids, settledIds: new Set(['a']), done: { unprocessedIds: ['b', 'c'] } }),
+    { requeueIds: ['b', 'c'] }
+  );
+  assert.deepEqual(chunkOutcome({ ids, settledIds: new Set(ids), done: {} }), { requeueIds: [] });
+  assert.deepEqual(chunkOutcome({ ids, settledIds: new Set(['a']), error: 'SAP down' }), { requeueIds: ['b', 'c'] });
+  assert.deepEqual(chunkOutcome({ ids, settledIds: new Set(['a']) }), { cutOff: true });
 }
 
 // readSseEvents handles events split across reads and skips junk lines.
@@ -65,6 +96,61 @@ const uuid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
   const events = [];
   await readSseEvents(response, (e) => events.push(e));
   assert.deepEqual(events, [{ type: 'start' }, { type: 'done', synced: 2 }]);
+}
+
+// runBatchSync starts no job once startBy has passed; unstarted jobs come back in order.
+{
+  const originalRequest = sapService._makeRequestOnce;
+  const realNow = Date.now;
+  let clock = 1_000;
+  Date.now = () => clock;
+  sapService._makeRequestOnce = async () => SAP_STATUSES;
+  const started = [];
+  const supabase = fakeJobsSupabase((jobId) => {
+    started.push(jobId);
+    clock += 100; // every job outlasts the budget
+    return jobNotFound();
+  });
+  const jobs = [1, 2, 3, 4].map((n) => ({ id: uuid(n), job_number: `J${n}` }));
+  try {
+    const results = await runBatchSync({ supabase, sessionCookies: cookies, jobs, startBy: 1_050 });
+    assert.deepEqual(started, [uuid(1)]);
+    assert.deepEqual(results.unprocessedIds, [uuid(2), uuid(3), uuid(4)]);
+    assert.equal(results.failed, 1);
+
+    // Without startBy (cron, single-request sync) every job runs.
+    started.length = 0;
+    const all = await runBatchSync({ supabase, sessionCookies: cookies, jobs });
+    assert.equal(started.length, 4);
+    assert.deepEqual(all.unprocessedIds, []);
+  } finally {
+    Date.now = realNow;
+    sapService._makeRequestOnce = originalRequest;
+  }
+}
+
+// A job that throws is recorded as failed and the batch carries on; logs carry job_id.
+{
+  const originalRequest = sapService._makeRequestOnce;
+  sapService._makeRequestOnce = async () => SAP_STATUSES;
+  const supabase = fakeJobsSupabase((jobId) =>
+    jobId === uuid(1) ? Promise.reject(new Error('db exploded')) : jobNotFound()
+  );
+  const logs = [];
+  try {
+    const jobs = [1, 2, 3].map((n) => ({ id: uuid(n), job_number: `J${n}` }));
+    const results = await runBatchSync({ supabase, sessionCookies: cookies, jobs, onLog: (e) => logs.push(e) });
+    assert.equal(results.failed, 3);
+    assert.deepEqual(Object.fromEntries(results.errors.map((e) => [e.jobId, e.error])), {
+      [uuid(1)]: 'db exploded',
+      [uuid(2)]: 'Job not found',
+      [uuid(3)]: 'Job not found',
+    });
+    assert.equal(logs.find((e) => e.status === 'error' && e.job_id === uuid(1))?.error, 'db exploded');
+    assert.ok(logs.some((e) => e.status === 'running' && e.job_id === uuid(2)));
+  } finally {
+    sapService._makeRequestOnce = originalRequest;
+  }
 }
 
 console.log('syncJobsBatch tests passed');

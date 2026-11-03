@@ -76,7 +76,12 @@ import Swal from "sweetalert2";
 import ResponsiveTable from "./_components/ResponsiveTable";
 import { jobDisplayCustomerName, parseEmbeddedCustomerName } from '../../../lib/utils/embeddedCustomerName';
 import { uniqueActiveTechnicianJobs } from '../../../lib/jobs/uniqueActiveTechnicianJobs';
-import { chunkArray, readSseEvents, SYNC_CHUNK_SIZE } from '../../../lib/jobs/syncSapChunks';
+import {
+  chunkOutcome,
+  MAX_STALLED_SYNC_BATCHES,
+  readSseEvents,
+  SYNC_CHUNK_SIZE,
+} from '../../../lib/jobs/syncSapChunks';
 import { softDeleteFollowUpsForJobs } from '../../../lib/followUps/followUpListSummary';
 import { useQueryClient } from 'react-query';
 import {
@@ -2043,8 +2048,12 @@ const ViewJobs = () => {
       remainingUnsynced,
     });
 
-  /** Sync one planned batch over SSE. Resolves { done } or { error }; never throws for server errors. */
-  const runSyncChunk = async ({ ids, index, count, filter, offset, total, totals }) => {
+  /**
+   * Sync one batch over SSE, counting each finished job into `totals` as its log
+   * arrives. Resolves { error } when the server rejects the request, else the
+   * chunkOutcome() result plus `settled` (jobs of this batch finished or skipped).
+   */
+  const runSyncChunk = async ({ ids, index, count, filter, total, totals }) => {
     const res = await fetch('/api/jobs/sync-hourly', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2058,42 +2067,50 @@ const ViewJobs = () => {
       };
     }
 
+    const settledIds = new Set();
     let done = null;
-    let error = null;
+    let streamError = null;
     await readSseEvents(res, (event) => {
       if (event.type === 'error') {
-        error = event.error || 'Sync failed';
+        streamError = event.error || 'Sync failed';
       } else if (event.type === 'start') {
+        (event.skippedIds || []).forEach((id) => settledIds.add(id));
         setSyncToSapProgress((prev) => ({ ...prev, concurrency: event.concurrency ?? prev?.concurrency ?? 2 }));
       } else if (event.type === 'log') {
         setSyncLiveFeed((prev) =>
           [...prev, { id: `${Date.now()}-${Math.random()}`, ...event }].slice(-200)
         );
-      } else if (event.type === 'progress') {
-        const current = offset + (event.current ?? 0);
+        const finished = event.status === 'success' || event.status === 'error';
+        if (!finished || !event.job_id || settledIds.has(event.job_id)) return;
+        settledIds.add(event.job_id);
+        totals.processed++;
+        if (event.status === 'success') {
+          totals.synced++;
+        } else {
+          totals.failed++;
+          totals.errors.push({ jobId: event.job_id, job_number: event.job_number ?? null, error: event.error });
+        }
         setSyncToSapProgress((prev) => ({
           ...prev,
-          current,
+          current: totals.processed,
           total,
           jobNumber: event.job_number ?? null,
-          synced: totals.synced + (event.synced ?? 0),
-          failed: totals.failed + (event.failed ?? 0),
-          message: event.job_number
-            ? `Syncing ${event.job_number} (${current}/${total}, batch ${index + 1} of ${count})…`
-            : `Processing ${current}/${total}…`,
+          synced: totals.synced,
+          failed: totals.failed,
+          message: `Synced ${event.job_number ?? 'job'} (${totals.processed}/${total})…`,
         }));
       } else if (event.type === 'done') {
         done = event;
+        totals.remainingUnsynced = event.remainingUnsynced ?? totals.remainingUnsynced;
       }
     });
 
-    if (error) return { error };
-    if (!done) return { error: 'No response from server. The request was cut off before it finished.' };
-    return { done };
+    return { ...chunkOutcome({ ids, settledIds, done, error: streamError }), settled: settledIds.size, streamError };
   };
 
-  // Plan once, then sync in small batches: one request for the whole range ran
-  // past the 300s function limit (~65 jobs) and was killed mid-run.
+  // Plan once, then sync in batches. The server stops each batch on a time
+  // budget (SAP speed varies ~5x) and hands back the jobs it didn't start;
+  // they go back on the queue, so a slow batch no longer ends the run.
   const runSyncToSap = async () => {
     const hasRange = Boolean(syncDateFilter.dateFrom || syncDateFilter.dateTo);
     if (syncIncludeSynced && !hasRange) return;
@@ -2107,7 +2124,7 @@ const ViewJobs = () => {
     const filter = { dateField: syncDateFilter.dateField };
     if (syncDateFilter.dateFrom) filter.dateFrom = syncDateFilter.dateFrom;
     if (syncDateFilter.dateTo) filter.dateTo = syncDateFilter.dateTo;
-    const totals = { synced: 0, failed: 0, errors: [], processed: 0 };
+    const totals = { synced: 0, failed: 0, errors: [], processed: 0, remainingUnsynced: null };
 
     try {
       const planPayload = { plan: true, ...filter };
@@ -2129,14 +2146,13 @@ const ViewJobs = () => {
         return;
       }
 
-      const jobIds = (Array.isArray(plan.jobs) ? plan.jobs : []).map((j) => j.id);
-      if (!jobIds.length) {
+      const queue = (Array.isArray(plan.jobs) ? plan.jobs : []).map((j) => j.id);
+      const total = queue.length;
+      if (!total) {
         showSyncResult({ totals });
         return;
       }
 
-      const chunks = chunkArray(jobIds, SYNC_CHUNK_SIZE);
-      const total = jobIds.length;
       setSyncToSapProgress({
         current: 0,
         total,
@@ -2144,42 +2160,47 @@ const ViewJobs = () => {
         jobNumber: null,
         synced: 0,
         failed: 0,
-        message: `Syncing ${total.toLocaleString()} job(s) in ${chunks.length} batch(es)…`,
+        message: `Syncing ${total.toLocaleString()} job(s) in batches of ${SYNC_CHUNK_SIZE}…`,
       });
 
-      let offset = 0;
-      let remainingUnsynced = null;
-      for (let index = 0; index < chunks.length; index++) {
-        const outcome = await runSyncChunk({
-          ids: chunks[index],
-          index,
-          count: chunks.length,
-          filter,
-          offset,
-          total,
+      const stopRun = (reason) => {
+        const text = String(reason).trim();
+        const sentence = /[.!?]$/.test(text) ? text : `${text}.`;
+        const left = (total - totals.processed).toLocaleString();
+        showSyncResult({
+          errorMessage: `Stopped after ${totals.processed.toLocaleString()} of ${total.toLocaleString()} job(s): ${sentence} Run Sync to SAP again for the remaining ${left}.`,
           totals,
         });
+        if (totals.synced > 0) refreshJobs();
+      };
+
+      let stalledBatches = 0;
+      for (let index = 0; queue.length; index++) {
+        const ids = queue.splice(0, SYNC_CHUNK_SIZE);
+        // Audit label only: the count grows when a batch hands jobs back.
+        const count = index + 1 + Math.ceil(queue.length / SYNC_CHUNK_SIZE);
+        const outcome = await runSyncChunk({ ids, index, count, filter, total, totals });
 
         if (outcome.error) {
-          const earlier = index > 0 ? ' Jobs in earlier batches were synced. Run Sync to SAP again for the rest.' : '';
-          showSyncResult({
-            errorMessage: `Stopped at batch ${index + 1} of ${chunks.length}: ${outcome.error}${earlier}`,
-            totals,
-          });
-          if (totals.synced > 0) refreshJobs();
+          stopRun(outcome.error);
+          return;
+        }
+        if (outcome.cutOff) {
+          // The server may still be syncing this batch; resending it now could
+          // create the same SAP Activity twice.
+          stopRun('the connection to the server was lost mid-batch and that batch may still be finishing; wait a few minutes first.');
           return;
         }
 
-        const { done } = outcome;
-        totals.synced += done.synced ?? 0;
-        totals.failed += done.failed ?? 0;
-        totals.processed += done.processed ?? 0;
-        if (Array.isArray(done.errors)) totals.errors.push(...done.errors);
-        remainingUnsynced = done.remainingUnsynced ?? remainingUnsynced;
-        offset += chunks[index].length;
+        queue.unshift(...outcome.requeueIds);
+        stalledBatches = outcome.settled === 0 ? stalledBatches + 1 : 0;
+        if (stalledBatches >= MAX_STALLED_SYNC_BATCHES) {
+          stopRun(outcome.streamError || 'SAP did not finish any job in the last batches.');
+          return;
+        }
       }
 
-      showSyncResult({ totals, remainingUnsynced });
+      showSyncResult({ totals, remainingUnsynced: totals.remainingUnsynced });
       if (totals.synced > 0) refreshJobs();
     } catch (e) {
       showSyncResult({ errorMessage: e?.message || 'Request failed.', totals: totals.processed ? totals : null });

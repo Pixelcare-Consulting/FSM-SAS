@@ -11,8 +11,9 @@
  *   { picker: 'synced' | 'unsynced', search, dateFrom, dateTo } — one picker list, search applied server-side
  *   { plan: true, ...same filters as a sync } — ordered { id, job_number } list the sync would process
  *   { stream: true, jobIds: [...], chunkIndex, chunkCount, dateFrom, dateTo } — SSE sync of one chunk
- *     (max MAX_SYNC_CHUNK_SIZE ids). The UI plans once, then sends chunks so no request hits the
- *     function time limit.
+ *     (max MAX_SYNC_CHUNK_SIZE ids). Starts no job after CHUNK_START_BUDGET_MS and returns the rest
+ *     as unprocessedIds; SAP calls end by CHUNK_SAP_DEADLINE_MS. The UI plans once, then sends
+ *     chunks and resends the unprocessed ids, so no request hits the function time limit.
  *   { limit?: number } — capped batch (cron/scripts)
  *
  * Requires SAP session cookies (except preview-only without SAP — preview doesn't need SAP).
@@ -48,6 +49,8 @@ import {
 } from '../../../lib/services/auditLog';
 
 export const config = {
+  // The chunk time budget below is sized against this limit.
+  maxDuration: 300,
   api: {
     responseLimit: false,
     bodyParser: {
@@ -55,6 +58,17 @@ export const config = {
     },
   },
 };
+
+/**
+ * A chunk starts no new job after this. 25 jobs took 47–285s depending on SAP
+ * load (one went past 300s and was killed); a single job has taken up to ~50s.
+ */
+const CHUNK_START_BUDGET_MS = 150_000;
+/**
+ * Every SAP call in a chunk ends by this, so jobs still running finish (or fail)
+ * with time left to write their logs and send `done` before maxDuration.
+ */
+const CHUNK_SAP_DEADLINE_MS = 265_000;
 
 function logPerJobSyncAudit(req, row, result) {
   logJobSyncResult({
@@ -115,8 +129,12 @@ async function logJobSyncLifecycle(req, phase, extra = {}) {
   });
 }
 
-/** One client-planned chunk: sync exactly these jobs, then `done` with this chunk's results. */
+/**
+ * One client-planned chunk: sync these jobs until the time budget runs out,
+ * then `done` with this chunk's results and the ids it didn't start.
+ */
 async function streamChunkSync({ req, res, send, supabase, sessionCookies, jobIds, dateFilter, body, onAudit }) {
+  const startedAt = Date.now();
   const chunk = parseChunkPosition(body);
   const lifecycle = {
     stream: true,
@@ -129,11 +147,13 @@ async function streamChunkSync({ req, res, send, supabase, sessionCookies, jobId
 
   try {
     const jobs = await fetchJobRowsByIds(supabase, jobIds, dateFilter);
+    const found = new Set(jobs.map((row) => row.id));
     send({
       type: 'start',
       processing: jobs.length,
       toProcess: jobs.length,
-      skipped: jobIds.length - jobs.length,
+      // Deleted or moved out of the range since the plan; the client drops them.
+      skippedIds: jobIds.filter((id) => !found.has(id)),
       concurrency: SYNC_CONCURRENCY,
       chunk,
       message: `Syncing ${jobs.length.toLocaleString()} job(s) to SAP (${SYNC_CONCURRENCY} parallel)…`,
@@ -141,14 +161,18 @@ async function streamChunkSync({ req, res, send, supabase, sessionCookies, jobId
 
     await logJobSyncLifecycle(req, 'started', { ...lifecycle, processed: jobs.length, requested: jobIds.length });
 
-    const results = await runBatchSync({
-      supabase,
-      sessionCookies,
-      jobs,
-      onAudit,
-      onProgress: (p) => send({ type: 'progress', ...p }),
-      onLog: (entry) => send({ type: 'log', ts: new Date().toISOString(), ...entry }),
-    });
+    const results = await sapService.withDeadline(startedAt + CHUNK_SAP_DEADLINE_MS, () =>
+      runBatchSync({
+        supabase,
+        sessionCookies,
+        jobs,
+        onAudit,
+        startBy: startedAt + CHUNK_START_BUDGET_MS,
+        onProgress: (p) => send({ type: 'progress', ...p }),
+        onLog: (entry) => send({ type: 'log', ts: new Date().toISOString(), ...entry }),
+      })
+    );
+    const processed = jobs.length - results.unprocessedIds.length;
 
     const remainingUnsynced = await countJobs(supabase, { unsyncedOnly: true, dateFilter });
 
@@ -156,7 +180,9 @@ async function streamChunkSync({ req, res, send, supabase, sessionCookies, jobId
       ...lifecycle,
       synced: results.synced,
       failed: results.failed,
-      processed: jobs.length,
+      processed,
+      unprocessed: results.unprocessedIds.length,
+      durationMs: Date.now() - startedAt,
       remainingUnsynced,
     });
 
@@ -164,7 +190,7 @@ async function streamChunkSync({ req, res, send, supabase, sessionCookies, jobId
       type: 'done',
       success: true,
       message: `Synced ${results.synced} jobs, ${results.failed} failed`,
-      processed: jobs.length,
+      processed,
       remainingUnsynced,
       concurrency: SYNC_CONCURRENCY,
       chunk,
