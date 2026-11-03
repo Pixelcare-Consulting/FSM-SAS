@@ -141,4 +141,43 @@ const BASE = '2026-000090__33547';
   }
 }
 
+{
+  // Every tech removed from the job: its old rows (incl. a team row) are deleted, nothing written.
+  const calls = [];
+  const stored = [
+    { Code: 501, Name: BASE, U_JobNo: '2026-000090', U_JobTech: 'A2Mazlan,C4Yoga.' },
+    { Code: 502, Name: `${BASE}__C4Yoga.`, U_JobNo: '2026-000090', U_JobTech: 'C4Yoga.' },
+  ];
+  const original = sapService.makeRequest;
+  sapService.makeRequest = async (endpoint, options = {}) => {
+    const method = options.method || 'GET';
+    calls.push({ method, endpoint });
+    return method === 'GET' ? { value: stored } : {};
+  };
+  const cookies = { b1session: 's', routeid: 'r' };
+  try {
+    const res = await upsertApiJobScheduleRow(cookies, {
+      jobNumber: '2026-000090',
+      sapActivityId: 33547,
+      technicianJobs: [tj('A2Mazlan', 'x', { deleted_at: '2026-11-01T00:00:00Z' })],
+    });
+    assert.equal(res.ok, true);
+    assert.deepEqual(
+      calls.filter((c) => c.method !== 'GET').map((c) => [c.method, c.endpoint]),
+      [
+        ['DELETE', 'U_API_JOB_SCHEDULE(501)'],
+        ['DELETE', 'U_API_JOB_SCHEDULE(502)'],
+      ]
+    );
+
+    // Assignments not passed at all (unknown): skip without touching SAP.
+    calls.length = 0;
+    const skipped = await upsertApiJobScheduleRow(cookies, { jobNumber: '2026-000090', sapActivityId: 33547 });
+    assert.equal(skipped.skipped, true);
+    assert.equal(calls.length, 0);
+  } finally {
+    sapService.makeRequest = original;
+  }
+}
+
 console.log('sapJobIncentivePush tests passed');

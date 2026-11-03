@@ -10,6 +10,37 @@ assert.equal(sapService.isRetryableSapError(new Error('SAP API Error: 401 Unauth
 assert.ok(sapService.defaultTimeout >= 90000, 'read timeout should be at least 90s');
 assert.ok(sapService.writeTimeout >= 120000, 'write timeout should be at least 120s');
 
+// SAP deadlock victims are rolled back, so they are safe to retry (even POST).
+const DEADLOCK =
+  'SAP API Error: 400 Bad Request - {\n   "error" : {\n      "code" : -2038,\n      "message" : {\n' +
+  '         "lang" : "en-us",\n         "value" : "Could not commit transaction: Deadlock (-2038) detected during transaction"\n' +
+  '      }\n   }\n}';
+assert.equal(sapService.isRetryableSapError(new Error(DEADLOCK)), true);
+assert.equal(
+  sapService.isRetryableSapError(new Error('SAP API Error: 400 Bad Request - -2038 Could not commit transaction: duplicate key')),
+  false,
+  'other -2038 failures are not retried'
+);
+{
+  const original = sapService._makeRequestOnce;
+  const originalDelay = sapService.sapRetryDelayMs;
+  let attempts = 0;
+  sapService.sapRetryDelayMs = () => 0;
+  sapService._makeRequestOnce = async () => {
+    attempts++;
+    if (attempts === 1) throw new Error(DEADLOCK);
+    return { Code: 7 };
+  };
+  try {
+    const res = await sapService.makeRequest('U_API_JOB_SCHEDULE', { method: 'POST', body: {} }, { b1session: 's', routeid: 'r' });
+    assert.deepEqual(res, { Code: 7 });
+    assert.equal(attempts, 2);
+  } finally {
+    sapService._makeRequestOnce = original;
+    sapService.sapRetryDelayMs = originalDelay;
+  }
+}
+
 // withDeadline: every SAP request in the call chain ends by the deadline.
 {
   const cookies = { b1session: 's', routeid: 'r' };

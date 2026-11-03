@@ -78,9 +78,15 @@ import { jobDisplayCustomerName, parseEmbeddedCustomerName } from '../../../lib/
 import { uniqueActiveTechnicianJobs } from '../../../lib/jobs/uniqueActiveTechnicianJobs';
 import {
   chunkOutcome,
+  EMPTY_SYNCED_SELECTION,
+  isSyncedJobSelected,
   MAX_STALLED_SYNC_BATCHES,
   readSseEvents,
+  selectAllSyncedInRange,
+  setSyncedJobsSelected,
   SYNC_CHUNK_SIZE,
+  syncedSelectionCount,
+  syncedSelectionPayload,
 } from '../../../lib/jobs/syncSapChunks';
 import { softDeleteFollowUpsForJobs } from '../../../lib/followUps/followUpListSummary';
 import { useQueryClient } from 'react-query';
@@ -453,7 +459,7 @@ const ViewJobs = () => {
   const [unsyncedJobSearch, setUnsyncedJobSearch] = useState('');
   // Already-in-SAP jobs the user ticked to re-push. Unticked jobs are left
   // alone so manual SAP edits (e.g. via Document Automation) aren't overwritten.
-  const [selectedSyncedJobIds, setSelectedSyncedJobIds] = useState([]);
+  const [syncedSelection, setSyncedSelection] = useState(EMPTY_SYNCED_SELECTION);
   const [syncedJobSearch, setSyncedJobSearch] = useState('');
   const [syncDateFilter, setSyncDateFilter] = useState({
     preset: 'all',
@@ -1960,7 +1966,7 @@ const ViewJobs = () => {
       // the server re-applies the range to selected ids anyway.
       if (data.syncedJobsListTruncated !== true) {
         const listedIds = new Set((data.syncedJobsList || []).map((j) => j.id));
-        setSelectedSyncedJobIds((prev) => prev.filter((id) => listedIds.has(id)));
+        setSyncedSelection((prev) => ({ ...prev, ids: prev.ids.filter((id) => listedIds.has(id)) }));
       }
       if (data.unsyncedJobsListTruncated !== true) {
         const listedUnsyncedIds = new Set((data.unsyncedJobsList || []).map((j) => j.id));
@@ -1977,7 +1983,7 @@ const ViewJobs = () => {
 
   const openSyncSapConfirm = () => {
     setSyncIncludeSynced(false);
-    setSelectedSyncedJobIds([]);
+    setSyncedSelection(EMPTY_SYNCED_SELECTION);
     setSyncedJobSearch('');
     setExcludedUnsyncedJobIds([]);
     setUnsyncedJobSearch('');
@@ -2131,7 +2137,7 @@ const ViewJobs = () => {
       if (excludedUnsyncedJobIds.length) planPayload.excludedUnsyncedJobIds = excludedUnsyncedJobIds;
       if (syncIncludeSynced) {
         planPayload.includeSynced = true;
-        planPayload.syncedJobIds = selectedSyncedJobIds;
+        Object.assign(planPayload, syncedSelectionPayload(syncedSelection));
       }
 
       const planRes = await fetch('/api/jobs/sync-hourly', {
@@ -2216,11 +2222,12 @@ const ViewJobs = () => {
   };
 
   const unsyncedToSyncCount = Math.max(0, syncSapConfirm.unsyncedJobs - excludedUnsyncedJobIds.length);
+  const syncedSelectedCount = syncedSelectionCount(syncedSelection, syncSapConfirm.syncedInRange ?? 0);
   const canStartJobSync =
     unsyncedToSyncCount > 0 ||
-    (syncIncludeSynced && selectedSyncedJobIds.length > 0);
+    (syncIncludeSynced && syncedSelectedCount > 0);
   const jobSyncStartCount =
-    unsyncedToSyncCount + (syncIncludeSynced ? selectedSyncedJobIds.length : 0);
+    unsyncedToSyncCount + (syncIncludeSynced ? syncedSelectedCount : 0);
 
   const syncPickerRange = {
     dateFrom: syncSapConfirm.appliedDateFrom,
@@ -2267,19 +2274,20 @@ const ViewJobs = () => {
   const filteredSyncedJobs = syncedPickerSearch.jobs ?? syncSapConfirm.syncedJobsList ?? [];
 
   const toggleSyncedJob = (id, checked) => {
-    setSelectedSyncedJobIds((prev) =>
-      checked ? (prev.includes(id) ? prev : [...prev, id]) : prev.filter((x) => x !== id)
-    );
+    setSyncedSelection((prev) => setSyncedJobsSelected(prev, [id], checked));
   };
 
   const allFilteredSyncedSelected =
-    filteredSyncedJobs.length > 0 && filteredSyncedJobs.every((j) => selectedSyncedJobIds.includes(j.id));
+    filteredSyncedJobs.length > 0 && filteredSyncedJobs.every((j) => isSyncedJobSelected(syncedSelection, j.id));
 
   const toggleAllFilteredSyncedJobs = (checked) => {
+    // Without a search, "Select all" is the whole range: the list stops at the newest 1,000.
+    if (syncedPickerSearch.jobs == null) {
+      setSyncedSelection(selectAllSyncedInRange(checked));
+      return;
+    }
     const ids = filteredSyncedJobs.map((j) => j.id);
-    setSelectedSyncedJobIds((prev) =>
-      checked ? [...new Set([...prev, ...ids])] : prev.filter((id) => !ids.includes(id))
-    );
+    setSyncedSelection((prev) => setSyncedJobsSelected(prev, ids, checked));
   };
 
   /**
@@ -2880,7 +2888,7 @@ const ViewJobs = () => {
                           onChange={(e) => toggleAllFilteredSyncedJobs(e.target.checked)}
                         />
                         <span className="small text-muted ms-auto">
-                          {selectedSyncedJobIds.length.toLocaleString()} selected
+                          {syncedSelectedCount.toLocaleString()} selected
                         </span>
                       </div>
                       <div className="border rounded bg-white" style={{ maxHeight: 260, overflowY: 'auto' }}>
@@ -2899,7 +2907,7 @@ const ViewJobs = () => {
                               <Form.Check
                                 type="checkbox"
                                 id={`sync-synced-${j.id}`}
-                                checked={selectedSyncedJobIds.includes(j.id)}
+                                checked={isSyncedJobSelected(syncedSelection, j.id)}
                                 onChange={(e) => toggleSyncedJob(j.id, e.target.checked)}
                               />
                               <div className="flex-grow-1 text-truncate">
@@ -2921,8 +2929,9 @@ const ViewJobs = () => {
                       ) : syncSapConfirm.syncedJobsListTruncated && (
                         <div className="text-muted small mt-1">
                           Showing the newest {(syncSapConfirm.syncedJobsList || []).length.toLocaleString()} of{' '}
-                          {(syncSapConfirm.syncedInRange ?? 0).toLocaleString()}. Search by job no. or customer, or
-                          narrow the date range, to find older jobs.
+                          {(syncSapConfirm.syncedInRange ?? 0).toLocaleString()}. Select all includes all{' '}
+                          {(syncSapConfirm.syncedInRange ?? 0).toLocaleString()}. Search by job no. or customer to
+                          find older jobs.
                         </div>
                       )}
                     </div>
@@ -3023,7 +3032,7 @@ const ViewJobs = () => {
                     </div>
                     <div className="text-muted" style={{ fontSize: 11 }}>
                       {syncIncludeSynced
-                        ? `${selectedSyncedJobIds.length.toLocaleString()} selected to update`
+                        ? `${syncedSelectedCount.toLocaleString()} selected to update`
                         : 'skipped (in range)'}
                     </div>
                   </div>
@@ -3060,7 +3069,7 @@ const ViewJobs = () => {
                 <Alert variant="secondary" className="mb-0 small">
                   No jobs selected. Tick at least one job to sync.
                 </Alert>
-              ) : syncSapConfirm.unsyncedJobs === 0 && !(syncIncludeSynced && selectedSyncedJobIds.length > 0) ? (
+              ) : syncSapConfirm.unsyncedJobs === 0 && !(syncIncludeSynced && syncedSelectedCount > 0) ? (
                 <Alert variant="success" className="mb-0 small">
                   {syncIncludeSynced
                     ? 'No unsynced jobs match this filter. Tick the jobs already in SAP you want to update.'

@@ -1,7 +1,24 @@
 import assert from 'node:assert/strict';
 
-import { fetchJobRowsByIds, MAX_SYNC_CHUNK_SIZE, parseJobIds } from '../lib/jobs/syncJobsQuery.js';
-import { chunkOutcome, readSseEvents, SYNC_CHUNK_SIZE } from '../lib/jobs/syncSapChunks.js';
+import {
+  fetchJobRowsByIds,
+  fetchJobsForSapSync,
+  getSyncPreview,
+  MAX_SYNC_CHUNK_SIZE,
+  parseExcludedSyncedJobIds,
+  parseJobIds,
+} from '../lib/jobs/syncJobsQuery.js';
+import {
+  chunkOutcome,
+  EMPTY_SYNCED_SELECTION,
+  isSyncedJobSelected,
+  readSseEvents,
+  selectAllSyncedInRange,
+  setSyncedJobsSelected,
+  SYNC_CHUNK_SIZE,
+  syncedSelectionCount,
+  syncedSelectionPayload,
+} from '../lib/jobs/syncSapChunks.js';
 import { runBatchSync } from '../lib/jobs/syncJobsBatch.js';
 import sapService from '../lib/services/sapService.js';
 
@@ -96,6 +113,71 @@ const jobNotFound = () => Promise.resolve({ data: null, error: { message: 'Job n
   const events = [];
   await readSseEvents(response, (e) => events.push(e));
   assert.deepEqual(events, [{ type: 'start' }, { type: 'done', synced: 2 }]);
+}
+
+// Already-in-SAP picker: ticked jobs are sent as-is; "Select all" means every synced job in the
+// range (the list only shows 1,000), and unticks after it become exclusions.
+{
+  let sel = setSyncedJobsSelected(EMPTY_SYNCED_SELECTION, ['a', 'b'], true);
+  sel = setSyncedJobsSelected(sel, ['a'], false);
+  assert.deepEqual(syncedSelectionPayload(sel), { syncedJobIds: ['b'] });
+  assert.equal(syncedSelectionCount(sel, 1377), 1);
+  assert.equal(isSyncedJobSelected(sel, 'b'), true);
+
+  sel = selectAllSyncedInRange(true);
+  assert.equal(syncedSelectionCount(sel, 1377), 1377);
+  assert.equal(isSyncedJobSelected(sel, 'not-in-the-listed-1000'), true);
+  sel = setSyncedJobsSelected(sel, ['x', 'y'], false);
+  assert.equal(isSyncedJobSelected(sel, 'x'), false);
+  assert.equal(syncedSelectionCount(sel, 1377), 1375);
+  sel = setSyncedJobsSelected(sel, ['y'], true);
+  assert.deepEqual(syncedSelectionPayload(sel), { excludedSyncedJobIds: ['x'] });
+
+  assert.deepEqual(selectAllSyncedInRange(false), EMPTY_SYNCED_SELECTION);
+  assert.deepEqual(parseExcludedSyncedJobIds({ excludedSyncedJobIds: [' a ', 'a', '', null] }), ['a']);
+  assert.deepEqual(parseExcludedSyncedJobIds({}), []);
+}
+
+// Server side of "Select all": every synced job in range minus the unticked ones, past the
+// picker's 1,000 (October 2026 had 1,377), and a stale exclusion can't drop another job.
+{
+  const rows = [
+    ...Array.from({ length: 16 }, (_, i) => ({ id: `u${i}`, sap_activity_id: null })),
+    ...Array.from({ length: 1377 }, (_, i) => ({ id: `s${i}`, sap_activity_id: String(40000 + i) })),
+  ].map((r, i) => ({ ...r, job_number: r.id, created_at: new Date(Date.UTC(2026, 9, 1) + i * 60e3).toISOString(), deleted_at: null }));
+  const supabase = {
+    from: () => {
+      const filters = [];
+      let opts = {};
+      let range = null;
+      const q = {
+        select: (_cols, o = {}) => ((opts = o), q),
+        is: (col, val) => (filters.push((r) => (val === null ? r[col] == null : r[col] === val)), q),
+        not: (col, op, val) => (filters.push((r) => (op === 'is' && val === null ? r[col] != null : true)), q),
+        in: (col, vals) => (filters.push((r) => vals.includes(r[col])), q),
+        order: () => q,
+        range: (a, b) => ((range = [a, b]), q),
+        then: (ok, err) => {
+          const hit = rows.filter((r) => filters.every((f) => f(r)));
+          const data = opts.head ? null : range ? hit.slice(range[0], range[1] + 1) : hit;
+          return Promise.resolve({ data, count: opts.count ? hit.length : null, error: null }).then(ok, err);
+        },
+      };
+      return q;
+    },
+  };
+
+  const excludedSyncedJobIds = ['s5', 's1200', 'deleted-or-out-of-range'];
+  const selection = { includeSynced: true, syncedJobIds: null, excludedSyncedJobIds };
+  const preview = await getSyncPreview(supabase, null, selection);
+  assert.equal(preview.syncedToUpdate, 1375);
+  assert.equal(preview.toProcess, 16 + 1375);
+
+  const jobs = await fetchJobsForSapSync(supabase, preview.toProcess, null, selection);
+  const ids = new Set(jobs.map((j) => j.id));
+  assert.equal(jobs.length, 16 + 1375);
+  assert.ok(!ids.has('s5') && !ids.has('s1200'), 'unticked jobs left out');
+  assert.ok(ids.has('s0') && ids.has('s1376'), 'oldest and newest synced jobs both included');
 }
 
 // runBatchSync starts no job once startBy has passed; unstarted jobs come back in order.

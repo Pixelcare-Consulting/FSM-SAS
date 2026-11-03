@@ -49,4 +49,21 @@ const log = formatJobSyncSapPlanLog(plan);
 assert.ok(log.includes('FSM → SAP JOB SYNC DRY RUN'));
 assert.ok(log.includes('U_API_PONo'));
 
+// Job already in SAP with every tech removed: the sync deletes its schedule rows, so the
+// preview says so instead of "missing technician".
+{
+  const job = {
+    id: 'job-uuid',
+    job_number: '2026-000099',
+    status: '554',
+    jobStatusId: '554',
+    jobStatusLabel: 'Unconfirmed',
+    sap_activity_id: '15492',
+    service_call: { call_number: '15050' },
+    technician_jobs: [{ deleted_at: '2026-11-01T00:00:00Z', technician: { sap_tech_code: 'TECH01', full_name: 'Tech One' } }],
+  };
+  const noTechPlan = buildJobSyncSapPlan({ job, customer: { customer_code: 'C001079' }, scheduleRows: [] });
+  assert.match(noTechPlan.steps.jobSchedule.reason, /no technicians assigned.*deletes/i);
+}
+
 console.log('jobSyncSapPlan.test.mjs: ok');

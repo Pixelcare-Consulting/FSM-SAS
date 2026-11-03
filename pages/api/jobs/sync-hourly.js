@@ -6,6 +6,8 @@
  *   { stream: true, syncAll: true } — SSE live sync (all unsynced jobs)
  *   { includeSynced: true, dateFrom, dateTo } — also update jobs already in SAP (date range required)
  *   { includeSynced: true, syncedJobIds: [...] } — only update the listed already-in-SAP jobs
+ *   { includeSynced: true, excludedSyncedJobIds: [...] } — "Select all": every already-in-SAP job in
+ *     range except these (ignored when syncedJobIds is sent)
  *   { excludedUnsyncedJobIds: [...] } — skip these unsynced jobs (unticked in the picker)
  *   { preview: true } — also returns unsyncedJobsList (+ syncedJobsList when includeSynced) for the pickers
  *   { picker: 'synced' | 'unsynced', search, dateFrom, dateTo } — one picker list, search applied server-side
@@ -30,6 +32,7 @@ import {
   getSyncPreview,
   hasDateRange,
   parseDateFilter,
+  parseExcludedSyncedJobIds,
   parseExcludedUnsyncedJobIds,
   parseIncludeSynced,
   parseJobIds,
@@ -232,6 +235,8 @@ export default async function handler(req, res) {
   const includeSynced = parseIncludeSynced(body);
   const syncedJobIds = includeSynced ? parseSyncedJobIds(body) : null;
   const excludedUnsyncedJobIds = parseExcludedUnsyncedJobIds(body);
+  const excludedSyncedJobIds = includeSynced && !syncedJobIds ? parseExcludedSyncedJobIds(body) : [];
+  const selection = { includeSynced, syncedJobIds, excludedUnsyncedJobIds, excludedSyncedJobIds };
   const includeSyncedDateError = getIncludeSyncedDateRangeError(includeSynced, dateFilter);
   if (includeSyncedDateError) {
     return res.status(400).json({
@@ -277,12 +282,7 @@ export default async function handler(req, res) {
 
   if (body.preview === true) {
     try {
-      const preview = await getSyncPreview(supabase, dateFilter, {
-        includeSynced,
-        syncedJobIds,
-        excludedUnsyncedJobIds,
-        withPickerLists: true,
-      });
+      const preview = await getSyncPreview(supabase, dateFilter, { ...selection, withPickerLists: true });
       return res.status(200).json(preview);
     } catch (e) {
       return res.status(500).json({ success: false, error: e?.message || 'Preview failed' });
@@ -291,12 +291,8 @@ export default async function handler(req, res) {
 
   if (body.plan === true) {
     try {
-      const preview = await getSyncPreview(supabase, dateFilter, { includeSynced, syncedJobIds, excludedUnsyncedJobIds });
-      const jobs = await fetchJobsForSapSync(supabase, preview.toProcess, dateFilter, {
-        includeSynced,
-        syncedJobIds,
-        excludedUnsyncedJobIds,
-      });
+      const preview = await getSyncPreview(supabase, dateFilter, selection);
+      const jobs = await fetchJobsForSapSync(supabase, preview.toProcess, dateFilter, selection);
       return res.status(200).json({
         success: true,
         jobs: jobs.map(({ id, job_number }) => ({ id, job_number })),
@@ -322,14 +318,10 @@ export default async function handler(req, res) {
 
   if (!useStream) {
     try {
-      const preview = await getSyncPreview(supabase, dateFilter, { includeSynced, syncedJobIds, excludedUnsyncedJobIds });
+      const preview = await getSyncPreview(supabase, dateFilter, selection);
       const totalUnsynced = preview.unsyncedJobs;
       const limit = resolveBatchLimit(body, preview.toProcess);
-      const jobs = await fetchJobsForSapSync(supabase, limit, dateFilter, {
-        includeSynced,
-        syncedJobIds,
-        excludedUnsyncedJobIds,
-      });
+      const jobs = await fetchJobsForSapSync(supabase, limit, dateFilter, selection);
       await logJobSyncLifecycle(req, 'started', {
         processed: jobs.length,
         totalUnsynced,
@@ -386,7 +378,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const preview = await getSyncPreview(supabase, dateFilter, { includeSynced, syncedJobIds, excludedUnsyncedJobIds });
+    const preview = await getSyncPreview(supabase, dateFilter, selection);
     const totalUnsynced = preview.unsyncedJobs;
     const limit = resolveBatchLimit(body, preview.toProcess);
 
@@ -449,11 +441,7 @@ export default async function handler(req, res) {
       message: `Loaded ${limit.toLocaleString()} job(s). Do not refresh until complete.`,
     });
 
-    const jobs = await fetchJobsForSapSync(supabase, limit, dateFilter, {
-        includeSynced,
-        syncedJobIds,
-        excludedUnsyncedJobIds,
-      });
+    const jobs = await fetchJobsForSapSync(supabase, limit, dateFilter, selection);
 
     await logJobSyncLifecycle(req, 'started', {
       processed: jobs.length,
