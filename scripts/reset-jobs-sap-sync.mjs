@@ -11,9 +11,15 @@
  *   pnpm job:reset-sap-sync -- --start=2026-05-01 --end=2026-05-31 --dry-run
  *   pnpm job:reset-sap-sync -- --all --yes --dry-run
  *   pnpm job:reset-sap-sync -- --start=2026-05-01 --end=2026-05-31 --clear-logs
+ *
+ * Every real run first saves the cleared values to backups/job-sap-reset/ and
+ * stops if that fails. The old IDs are only useful for undoing a reset before the
+ * next sync; after it, the job has a new SAP Activity.
  */
 
 import { createRequire } from 'module';
+import fs from 'fs';
+import path from 'path';
 
 const require = createRequire(import.meta.url);
 require('dotenv').config({ path: '.env.local' });
@@ -23,6 +29,7 @@ const { createClient } = require('@supabase/supabase-js');
 
 const FETCH_PAGE = 500;
 const UPDATE_CHUNK = 100;
+const BACKUP_DIR = path.join('backups', 'job-sap-reset');
 
 function parseArgs(argv) {
   const out = {
@@ -160,6 +167,26 @@ async function fetchSyncedJobs(supabase, args) {
   return rows;
 }
 
+/** @returns {string} path of the backup file */
+function writeResetBackup(jobs, { supabaseUrl, companyDb, resetAt }) {
+  fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  const filePath = path.join(BACKUP_DIR, `${resetAt.replace(/[:.]/g, '-')}.json`);
+  const backup = {
+    reset_at: resetAt,
+    // Job and call numbers collide between environments, so record which pair this was.
+    supabase_url: supabaseUrl,
+    sap_company_db: companyDb || null,
+    jobs: jobs.map(({ id, job_number, sap_activity_id, last_synced_at }) => ({
+      id,
+      job_number,
+      sap_activity_id,
+      last_synced_at,
+    })),
+  };
+  fs.writeFileSync(filePath, `${JSON.stringify(backup, null, 2)}\n`, { flag: 'wx' });
+  return filePath;
+}
+
 async function clearSyncLogs(supabase, jobIds) {
   let deleted = 0;
   for (let i = 0; i < jobIds.length; i += UPDATE_CHUNK) {
@@ -219,6 +246,13 @@ async function main() {
     console.log('\nDry run only — no changes written.');
     return;
   }
+
+  const backupPath = writeResetBackup(jobs, {
+    supabaseUrl: url,
+    companyDb: process.env.SAP_B1_COMPANY_DB,
+    resetAt: new Date().toISOString(),
+  });
+  console.log(`Backup written to ${backupPath}`);
 
   const jobIds = jobs.map((j) => j.id);
   const updated = await resetJobs(supabase, jobIds);
