@@ -74,6 +74,8 @@ import { FaUser, FaPlus, FaClipboard, FaBriefcase, FaTasks } from "react-icons/f
 import TablePagination from "../../../components/common/TablePagination";
 import Swal from "sweetalert2";
 import ResponsiveTable from "./_components/ResponsiveTable";
+import ResetSapLinkAction from "./_components/ResetSapLinkAction";
+import { isSapActivityMissingError } from "../../../lib/utils/sapActivityMissing";
 import { jobDisplayCustomerName, parseEmbeddedCustomerName } from '../../../lib/utils/embeddedCustomerName';
 import { uniqueActiveTechnicianJobs } from '../../../lib/jobs/uniqueActiveTechnicianJobs';
 import {
@@ -258,6 +260,9 @@ function getFriendlySyncErrorMessage(technicalError) {
   const raw = technicalError;
   const lower = raw.toLowerCase();
 
+  if (isSapActivityMissingError(raw)) {
+    return "This job's SAP activity was deleted in SAP. Use Reset SAP link, then sync again.";
+  }
   if (lower.includes("value too long") && lower.includes("cardcode")) {
     return "Customer code is too long for SAP. Please use a shorter customer code or contact your administrator.";
   }
@@ -304,6 +309,7 @@ function getFriendlySyncErrorMessage(technicalError) {
 /** Categorize SAP sync errors for grouped help text in the result modal. */
 function categorizeSyncError(technicalError) {
   const lower = (technicalError || '').toLowerCase();
+  if (isSapActivityMissingError(technicalError)) return 'activity_missing';
   if (lower.includes('cardcode') || lower.includes('customer not found')) return 'customer';
   if (lower.includes('value too long')) return 'field_length';
   if (lower.includes('sap session') || lower.includes('session required') || lower.includes('401')) return 'session';
@@ -317,6 +323,15 @@ function categorizeSyncError(technicalError) {
 }
 
 const SAP_SYNC_FIX_GUIDES = {
+  activity_missing: {
+    title: 'SAP activity was deleted',
+    summary: 'These jobs point to a SAP activity that no longer exists, often because it was removed from a service call in SAP.',
+    steps: [
+      'Ask whoever removed it whether the job should still be in SAP. If not, delete the job in the portal instead.',
+      'Check the job has the right service call, then click Reset SAP link on its row.',
+      'Run Sync to SAP again. The sync creates a new activity and adds it to the job’s service call.',
+    ],
+  },
   customer: {
     title: 'Customer code not recognized in SAP',
     summary: 'SAP could not find the customer (CardCode) linked to these jobs.',
@@ -3412,6 +3427,9 @@ const ViewJobs = () => {
                                     Details
                                   </span>
                                 </OverlayTrigger>
+                              )}
+                              {jobId && isSapActivityMissingError(err.error) && (
+                                <ResetSapLinkAction jobId={jobId} />
                               )}
                             </td>
                           </tr>

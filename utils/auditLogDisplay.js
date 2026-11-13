@@ -15,6 +15,7 @@ const ACTION_LABELS = {
   JOB_UPDATE: 'Job updated',
   JOB_DELETE: 'Job deleted',
   JOB_SYNC_SAP: 'Job synced to SAP',
+  JOB_SAP_LINK_RESET: 'Job SAP link reset',
   WORKER_CREATE: 'Worker created',
   WORKER_UPDATE: 'Worker updated',
   CUSTOMER_CREATE: 'Customer created',
