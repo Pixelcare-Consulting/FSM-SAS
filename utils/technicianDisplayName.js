@@ -36,3 +36,18 @@ export function buildTechnicianDisplayName(technician, user = null) {
   if (username && !looksLikeEmail(username)) return username;
   return 'Technician';
 }
+
+/**
+ * Name parts for a technician that only has `full_name` (SAP-imported records, e.g. "C6 Kumar .").
+ * First word, last word, and everything between as the middle name.
+ */
+export function splitFullName(fullName) {
+  const words = String(fullName ?? '').trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return { firstName: '', middleName: '', lastName: '' };
+  if (words.length === 1) return { firstName: words[0], middleName: '', lastName: '' };
+  return {
+    firstName: words[0],
+    middleName: words.slice(1, -1).join(' '),
+    lastName: words[words.length - 1],
+  };
+}

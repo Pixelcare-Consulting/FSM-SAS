@@ -89,7 +89,16 @@ export const PersonalTab = ({ onSubmit, initialValues }) => {
       setIsUploading(false);
     }
 
-    const fullName = `${firstName} ${middleName} ${lastName}`.trim();
+    // Keep the stored full_name unless a name field was edited: rebuilding it from the
+    // parts can change spacing ("A2 Mazlan" would become "A2  Mazlan").
+    const nameUnchanged =
+      Boolean(initialValues?.fullName) &&
+      firstName === (initialValues.firstName || "") &&
+      middleName === (initialValues.middleName || "") &&
+      lastName === (initialValues.lastName || "");
+    const fullName = nameUnchanged
+      ? initialValues.fullName
+      : `${firstName} ${middleName} ${lastName}`.trim();
 
     const formData = {
       profilePicture: profilePictureUrl,
