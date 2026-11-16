@@ -1841,6 +1841,15 @@ const TechnicianDetails = () => {
                           </div>
                           <div className="info-card">
                             <div className="info-icon">
+                              <Hash size={20} />
+                            </div>
+                            <div className="info-content">
+                              <div className="info-label">SAP Technician Code</div>
+                              <div className="info-value" style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.9rem' }}>{technician.sapTechCode || 'Not set'}</div>
+                            </div>
+                          </div>
+                          <div className="info-card">
+                            <div className="info-icon">
                               <Phone size={20} />
                             </div>
                             <div className="info-content">
